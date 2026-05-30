@@ -25,10 +25,11 @@ exports.stkPush = async (req, res) => {
         }
         formattedPhone = '+' + formattedPhone;
 
-        const callbackUrl = process.env.CALLBACK_URL || `https://your-ngrok-url.ngrok-free.app/callback?orderId=${orderId}`;
+        const baseCallbackUrl = process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback';
+        const callbackUrl = `${baseCallbackUrl}?orderId=${orderId}`;
 
         const paymentResponse = await axios.post(`${BASE_URL}/api/v1/incoming_payments`, {
-            payment_channel: 'm-mpesa',
+            payment_channel: 'm-pesa',
             till_number: TILL_NUMBER,
             subscriber: {
                 first_name: firstName || 'Customer',
