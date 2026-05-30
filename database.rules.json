@@ -1,0 +1,47 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "products": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('isAdmin').val() === true"
+    },
+    "categories": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('isAdmin').val() === true"
+    },
+    "storeInfo": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      "mpesaSecret": {
+        ".read": false
+      },
+      "mpesaKey": {
+        ".read": false
+      }
+    },
+    "orders": {
+      ".read": "auth != null",
+      "$orderId": {
+        ".read": "auth != null && (data.child('email').val() === auth.token.email || root.child('users').child(auth.uid).child('isAdmin').val() === true)",
+        ".write": "auth != null",
+        "status": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('isAdmin').val() === true"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('isAdmin').val() === true)",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "analytics": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      "traffic": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

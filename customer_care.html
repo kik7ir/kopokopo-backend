@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modish Admin - Customer Care</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --gold: #f1c40f;
+            --deep-blue: #0b004f;
+            --sidebar-bg: #0b004f;
+            --chat-list-bg: #ffffff;
+            --active-chat: #f0f7ff;
+            --msg-support: #0b004f;
+            --msg-user: #f1f1f1;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+        body {
+            display: flex;
+            height: 100vh;
+            background: #f4f6f8;
+        }
+
+        /* Sidebar / Chat List */
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: var(--deep-blue);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-header h2 { font-size: 1.2rem; }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        #enableAudioBtn {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.6);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+        }
+
+        #enableAudioBtn.enabled {
+            color: var(--gold);
+            text-shadow: 0 0 10px rgba(241, 196, 15, 0.4);
+        }
+
+        .alerts-section {
+            background: #fff9e6;
+            border-bottom: 1px solid #ffeeba;
+            padding: 15px;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .alerts-section h4 {
+            color: #856404;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .alert-card {
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-left: 4px solid var(--gold);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert-card h5 {
+            font-size: 0.9rem;
+            margin-bottom: 6px;
+            color: #222;
+        }
+
+        .alert-card p {
+            font-size: 0.75rem;
+            color: #555;
+            margin-bottom: 3px;
+        }
+
+        .ack-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 7px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .ack-btn:hover { background: #219150; }
+
+        .search-chats {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .search-chats input {
+            width: 100%;
+            padding: 10px 15px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            outline: none;
+            background: #f8f9fa;
+        }
+
+        #chatList {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .chat-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f1f1f1;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-item:hover { background: #f8f9fa; }
+        .chat-item.active { background: var(--active-chat); border-left: 4px solid var(--gold); }
+
+        .avatar {
+            width: 45px;
+            height: 45px;
+            background: var(--deep-blue);
+            color: var(--gold);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .chat-info { flex: 1; overflow: hidden; }
+        .chat-info h4 { font-size: 0.95rem; margin-bottom: 4px; color: #333; }
+        .chat-info p { font-size: 0.8rem; color: #777; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-meta { text-align: right; }
+        .chat-time { font-size: 0.7rem; color: #999; }
+        .unread-badge {
+            background: var(--gold);
+            color: #000;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: bold;
+            margin-top: 5px;
+            display: inline-block;
+        }
+
+        /* Sidebar Tabs */
+        .sidebar-tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+
+        .sidebar-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: #777;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar-tab.active {
+            color: var(--deep-blue);
+            border-bottom-color: var(--gold);
+            background: white;
+        }
+
+        /* Order List Item */
+        .order-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f1f1f1;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .order-item:hover { background: #f8f9fa; }
+        .order-item.active { background: var(--active-chat); border-left: 4px solid var(--gold); }
+        .order-item h4 { font-size: 0.9rem; margin-bottom: 4px; color: #333; display: flex; justify-content: space-between; }
+        .order-item p { font-size: 0.75rem; color: #777; }
+        .order-id { font-family: monospace; color: var(--deep-blue); font-weight: bold; font-size: 0.8rem; }
+        .order-status-pill {
+            font-size: 0.6rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #eee;
+            font-weight: bold;
+        }
+
+        /* Status Select in Detail */
+        .status-select-action {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--deep-blue);
+            outline: none;
+            background: #f8f9fa;
+        }
+
+        /* Order Detail View */
+        .order-detail-container {
+            padding: 30px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .order-header-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .detail-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .detail-card h3 {
+            font-size: 1rem;
+            margin-bottom: 15px;
+            color: var(--deep-blue);
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-row {
+            display: flex;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        .info-label {
+            width: 120px;
+            color: #777;
+            font-weight: 500;
+        }
+
+        .info-value {
+            flex: 1;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .items-list {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .items-list th {
+            text-align: left;
+            font-size: 0.8rem;
+            color: #777;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .items-list td {
+            padding: 12px 0;
+            border-bottom: 1px solid #f9f9f9;
+            font-size: 0.9rem;
+        }
+
+        .receipt-btn-action {
+            background: var(--gold);
+            color: #0b004f;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+
+        /* Main Chat Area */
+        .main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #f0f2f5;
+        }
+
+        .chat-header {
+            padding: 15px 25px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .user-details h3 { font-size: 1.1rem; }
+        .user-details p { font-size: 0.8rem; color: #2ecc71; font-weight: bold; }
+
+        #chatMessages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 60%;
+            padding: 12px 18px;
+            border-radius: 15px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            position: relative;
+        }
+
+        .message.user {
+            align-self: flex-start;
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 2px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .message.support {
+            align-self: flex-end;
+            background: var(--deep-blue);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .message-time { font-size: 0.65rem; opacity: 0.7; margin-top: 5px; text-align: right; }
+
+        .chat-input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 25px;
+            border: 1px solid #ddd;
+            outline: none;
+            font-size: 0.95rem;
+        }
+
+        .send-btn {
+            background: var(--deep-blue);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover { background: #1a0066; }
+
+        .no-chat-selected {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+        }
+
+        .no-chat-selected i { font-size: 5rem; margin-bottom: 20px; opacity: 0.2; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2><i class="fa-solid fa-headset"></i> Support</h2>
+            <div class="header-controls">
+                <button id="enableAudioBtn" title="Enable Audio Alerts">
+                    <i class="fa-solid fa-volume-xmark"></i>
+                </button>
+                <i class="fa-solid fa-ellipsis-vertical" style="cursor:pointer;"></i>
+            </div>
+        </div>
+
+        <div class="alerts-section" id="alertsSection" style="display:none;">
+            <h4><i class="fa-solid fa-bell"></i> Payment Signals</h4>
+            <div id="alertsList"></div>
+        </div>
+
+        <div class="sidebar-tabs">
+            <div class="sidebar-tab active" id="tabChats" onclick="switchSidebarTab('chats')">Chats</div>
+            <div class="sidebar-tab" id="tabOrders" onclick="switchSidebarTab('orders')">Orders</div>
+        </div>
+
+        <div id="chatsContainer">
+            <div class="search-chats">
+                <input type="text" id="chatSearchInput" placeholder="Search customer..." oninput="filterChats()">
+            </div>
+            <div id="chatList">
+                <!-- Sessions list -->
+            </div>
+        </div>
+
+        <div id="ordersContainer" style="display: none;">
+            <div class="search-chats">
+                <input type="text" id="orderSearchInput" placeholder="Search Order ID, Name or Phone..." oninput="filterOrders()">
+            </div>
+            <div id="orderList">
+                <!-- Orders list -->
+            </div>
+        </div>
+    </div>
+
+    <div class="main-chat" id="mainChatArea">
+        <div class="no-chat-selected">
+            <i class="fa-solid fa-comments"></i>
+            <h3>Select a customer to start chatting</h3>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue, push, set, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDeuy7YfMZ-FXM4-SrIKFO3IKpyB0OEJVA",
+            authDomain: "school-system-a97a4.firebaseapp.com",
+            databaseURL: "https://school-system-a97a4-default-rtdb.firebaseio.com",
+            projectId: "school-system-a97a4",
+            storageBucket: "school-system-a97a4.firebasestorage.app",
+            messagingSenderId: "105805138185",
+            appId: "1:105805138185:web:a2ab11e5ff1359cb69ebd8",
+            measurementId: "G-3E9DVVRD6J"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let activeSessionId = null;
+        let activeOrderId = null;
+        let allSessions = {};
+        let allOrders = {};
+        let isAudioEnabled = false;
+        let seenAlerts = new Set();
+        const alertAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+
+        // Sidebar Tab Switching
+        window.switchSidebarTab = (tab) => {
+            document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('chatsContainer').style.display = tab === 'chats' ? 'block' : 'none';
+            document.getElementById('ordersContainer').style.display = tab === 'orders' ? 'block' : 'none';
+            document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+        };
+
+        // Filtering
+        window.filterChats = () => {
+            const query = document.getElementById('chatSearchInput').value.toLowerCase();
+            const filtered = {};
+            Object.keys(allSessions).forEach(id => {
+                const s = allSessions[id];
+                if ((s.name || '').toLowerCase().includes(query) || (s.phone || '').includes(query)) {
+                    filtered[id] = s;
+                }
+            });
+            renderSessions(filtered);
+        };
+
+        window.filterOrders = () => {
+            const query = document.getElementById('orderSearchInput').value.toLowerCase();
+            const filtered = {};
+            Object.keys(allOrders).forEach(id => {
+                const o = allOrders[id];
+                if (id.toLowerCase().includes(query) ||
+                    (o.customerName || '').toLowerCase().includes(query) ||
+                    (o.phone || '').includes(query)) {
+                    filtered[id] = o;
+                }
+            });
+            renderOrders(filtered);
+        };
+
+        // Audio Controls
+        const audioBtn = document.getElementById('enableAudioBtn');
+        audioBtn.onclick = () => {
+            isAudioEnabled = !isAudioEnabled;
+            if (isAudioEnabled) {
+                audioBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                audioBtn.classList.add('enabled');
+                alertAudio.play().catch(() => {}); // Unlock
+            } else {
+                audioBtn.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
+                audioBtn.classList.remove('enabled');
+            }
+        };
+
+        // Order Monitoring & Alerts
+        onValue(ref(db, 'orders'), (snapshot) => {
+            const orders = snapshot.val();
+            allOrders = orders || {};
+
+            const alertsList = document.getElementById('alertsList');
+            const alertsSection = document.getElementById('alertsSection');
+
+            if (!orders) {
+                alertsSection.style.display = 'none';
+                renderOrders({});
+                return;
+            }
+
+            renderOrders(allOrders);
+
+            const pending = Object.entries(orders).filter(([_, data]) => data.paymentSignal === 'manual_pending');
+
+            if (pending.length > 0) {
+                alertsSection.style.display = 'block';
+                alertsList.innerHTML = '';
+
+                let hasNew = false;
+                pending.forEach(([id, data]) => {
+                    if (!seenAlerts.has(id)) {
+                        hasNew = true;
+                        seenAlerts.add(id);
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'alert-card';
+                    card.innerHTML = `
+                        <h5>Pending Manual Payment</h5>
+                        <p><strong>Customer:</strong> ${data.customerName || 'Guest'}</p>
+                        <p><strong>Amount:</strong> ${data.currency || 'KSh'} ${data.amount}</p>
+                        <p><strong>Phone:</strong> ${data.phone || 'N/A'}</p>
+                        <button class="ack-btn" onclick="acknowledgePayment('${id}')">Acknowledge</button>
+                    `;
+                    alertsList.appendChild(card);
+                });
+
+                if (hasNew && isAudioEnabled) {
+                    alertAudio.play().catch(e => console.log("Audio play failed", e));
+                }
+            } else {
+                alertsSection.style.display = 'none';
+                seenAlerts.clear();
+            }
+        });
+
+        function renderOrders(orders) {
+            const list = document.getElementById('orderList');
+            list.innerHTML = '';
+
+            const sorted = Object.keys(orders).sort((a, b) => (orders[b].timestamp || 0) - (orders[a].timestamp || 0));
+
+            sorted.forEach(id => {
+                const o = orders[id];
+                const div = document.createElement('div');
+                div.className = `order-item ${activeOrderId === id ? 'active' : ''}`;
+                div.onclick = () => selectOrder(id, o);
+
+                const date = o.timestamp ? new Date(o.timestamp).toLocaleDateString() : '';
+                const status = o.status || 'Ordered';
+
+                div.innerHTML = `
+                    <h4>
+                        <span>${o.customerName || 'Guest'}</span>
+                        <span class="order-id">#${id.substring(0, 8)}</span>
+                    </h4>
+                    <p>KSh ${o.amount ? o.amount.toLocaleString() : '0'} • ${date}</p>
+                    <span class="order-status-pill">${status}</span>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function selectOrder(id, order) {
+            activeOrderId = id;
+            activeSessionId = null; // Clear active chat state
+
+            const main = document.getElementById('mainChatArea');
+            const dateStr = order.timestamp ? new Date(order.timestamp).toLocaleString() : 'N/A';
+
+            let itemsHtml = '';
+            if (order.items && Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    const title = typeof item === 'string' ? item : item.title;
+                    const qty = item.qty || 1;
+                    const price = item.price || 0;
+                    itemsHtml += `
+                        <tr>
+                            <td>
+                                <b>${title}</b><br>
+                                <small>${item.size ? 'Size: '+item.size : ''} ${item.colour ? 'Color: '+item.colour : ''}</small>
+                            </td>
+                            <td>x${qty}</td>
+                            <td style="text-align:right">KSh ${(price * qty).toLocaleString()}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                itemsHtml = `
+                    <tr>
+                        <td><b>${order.productTitle || 'Unknown Product'}</b></td>
+                        <td>x${order.quantity || 1}</td>
+                        <td style="text-align:right">KSh ${order.amount ? order.amount.toLocaleString() : '0'}</td>
+                    </tr>
+                `;
+            }
+
+            const currentStatus = order.status || 'Ordered';
+
+            main.innerHTML = `
+                <div class="order-detail-container">
+                    <div class="order-header-card">
+                        <div>
+                            <h2 style="color:var(--deep-blue); border:none; padding:0;">Order #${id}</h2>
+                            <p style="color:#777; font-size:0.9rem;">Placed on ${dateStr}</p>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <select class="status-select-action" onchange="updateOrderStatus('${id}', this.value)">
+                                <option value="Ordered" ${currentStatus === 'Ordered' ? 'selected' : ''}>Ordered</option>
+                                <option value="Preparing Your Order" ${currentStatus === 'Preparing Your Order' ? 'selected' : ''}>Preparing</option>
+                                <option value="Shipping" ${currentStatus === 'Shipping' ? 'selected' : ''}>Shipping</option>
+                                <option value="In Transit" ${currentStatus === 'In Transit' ? 'selected' : ''}>In Transit</option>
+                                <option value="Arrived" ${currentStatus === 'Arrived' ? 'selected' : ''}>Arrived</option>
+                                <option value="Delivered" ${currentStatus === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                                <option value="Completed" ${currentStatus === 'Completed' ? 'selected' : ''}>Completed</option>
+                            </select>
+                            <span class="status-badge ${currentStatus === 'Completed' ? 'status-completed' : 'status-pending'}">
+                                ${currentStatus}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                        <div class="detail-card">
+                            <h3><i class="fa-solid fa-user"></i> Customer Info</h3>
+                            <div class="info-row"><div class="info-label">Name:</div><div class="info-value">${order.customerName}</div></div>
+                            <div class="info-row"><div class="info-label">Phone:</div><div class="info-value">${order.phone}</div></div>
+                            <div class="info-row"><div class="info-label">Address:</div><div class="info-value">${order.address || 'Not provided'}</div></div>
+                            <div style="display:flex; gap:10px; margin-top:15px;">
+                                ${order.deliveryLocation ? `
+                                    <button class="ack-btn" style="background:var(--deep-blue);" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${order.deliveryLocation.lat},${order.deliveryLocation.lng}', '_blank')">
+                                        <i class="fa-solid fa-location-dot"></i> View Maps
+                                    </button>
+                                ` : ''}
+                                <button class="ack-btn" style="background:#27ae60;" onclick="window.open('https://wa.me/${order.phone.replace(/\D/g,'')}', '_blank')">
+                                    <i class="fa-brands fa-whatsapp"></i> WhatsApp
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="detail-card">
+                            <h3><i class="fa-solid fa-credit-card"></i> Payment Details</h3>
+                            <div class="info-row"><div class="info-label">Method:</div><div class="info-value">${order.paymentMethod || 'Lipa na M-PESA'}</div></div>
+                            <div class="info-row"><div class="info-label">Amount:</div><div class="info-value">KSh ${order.amount ? order.amount.toLocaleString() : '0'}</div></div>
+                            <div class="info-row"><div class="info-label">Signal:</div><div class="info-value">${order.paymentSignal || 'none'}</div></div>
+                            ${order.paymentSignal === 'manual_pending' ? `
+                                <button class="ack-btn" style="background:#f39c12; margin-top:15px;" onclick="confirmManualPayment('${id}')">
+                                    <i class="fa-solid fa-check-double"></i> Confirm Payment
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3><i class="fa-solid fa-box-open"></i> Order Items</h3>
+                        <table class="items-list">
+                            <thead>
+                                <tr><th>Description</th><th>Qty</th><th style="text-align:right">Total</th></tr>
+                            </thead>
+                            <tbody>
+                                ${itemsHtml}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="2" style="padding-top:15px; text-align:right; font-weight:bold;">Grand Total:</td>
+                                    <td style="padding-top:15px; text-align:right; font-weight:bold; font-size:1.1rem; color:var(--deep-blue);">KSh ${order.amount ? order.amount.toLocaleString() : '0'}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            // Highlight in sidebar
+            renderOrders(allOrders);
+        }
+
+        window.updateOrderStatus = (id, newStatus) => {
+            update(ref(db, `orders/${id}`), {
+                status: newStatus
+            }).then(() => {
+                // The onValue listener will handle UI update
+            });
+        };
+
+        window.confirmManualPayment = (id) => {
+            if (confirm("Confirm payment received?")) {
+                update(ref(db, `orders/${id}`), {
+                    status: 'Preparing Your Order',
+                    paymentSignal: 'manual_confirmed'
+                });
+            }
+        };
+
+        window.acknowledgePayment = (orderId) => {
+            update(ref(db, `orders/${orderId}`), {
+                paymentSignal: 'acknowledged',
+                acknowledgedAt: serverTimestamp()
+            }).then(() => {
+                seenAlerts.delete(orderId);
+            });
+        };
+
+        // Load sessions
+        onValue(ref(db, 'chat_sessions'), (snapshot) => {
+            allSessions = snapshot.val() || {};
+            renderSessions(allSessions);
+        });
+
+        function renderSessions(sessions) {
+            const list = document.getElementById('chatList');
+            list.innerHTML = '';
+
+            if (!sessions) return;
+
+            const sorted = Object.keys(sessions).sort((a, b) => (sessions[b].timestamp || 0) - (sessions[a].timestamp || 0));
+
+            sorted.forEach(id => {
+                const s = sessions[id];
+                const div = document.createElement('div');
+                div.className = `chat-item ${activeSessionId === id ? 'active' : ''}`;
+                div.onclick = () => selectChat(id, s);
+
+                const initials = s.name ? s.name.substring(0, 2).toUpperCase() : '??';
+                const time = s.timestamp ? new Date(s.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+
+                div.innerHTML = `
+                    <div class="avatar">${initials}</div>
+                    <div class="chat-info">
+                        <h4>${s.name || 'Anonymous'}</h4>
+                        <p>${s.lastMessage || '...'}</p>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">${time}</div>
+                        ${s.lastSender === 'user' && activeSessionId !== id ? '<div class="unread-badge">NEW</div>' : ''}
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function selectChat(id, session) {
+            activeSessionId = id;
+            activeOrderId = null; // Clear active order state
+
+            const main = document.getElementById('mainChatArea');
+
+            main.innerHTML = `
+                <div class="chat-header">
+                    <div class="user-details">
+                        <h3>${session.name}</h3>
+                        <p>${session.phone}</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="send-btn" style="background:#e74c3c; margin-right:10px;" onclick="closeSession('${id}')">End Chat</button>
+                    </div>
+                </div>
+                <div id="chatMessages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="adminInput" placeholder="Type your reply...">
+                    <button class="send-btn" id="adminSendBtn">Send Reply</button>
+                </div>
+            `;
+
+            const msgRef = ref(db, `chats/${id}/messages`);
+            onValue(msgRef, (snapshot) => {
+                const messages = snapshot.val();
+                renderMessages(messages);
+            });
+
+            document.getElementById('adminSendBtn').onclick = () => sendReply(id);
+            document.getElementById('adminInput').onkeypress = (e) => {
+                if (e.key === 'Enter') sendReply(id);
+            };
+
+            // Re-render sessions/orders to update UI
+            renderSessions(allSessions);
+        }
+
+        function renderMessages(messages) {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            if (!messages) return;
+
+            Object.keys(messages).forEach(key => {
+                const m = messages[key];
+                const div = document.createElement('div');
+                div.className = `message ${m.sender === 'user' ? 'user' : 'support'}`;
+
+                const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+
+                div.innerHTML = `${m.text}<div class="message-time">${time}</div>`;
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function sendReply(id) {
+            const input = document.getElementById('adminInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const msgData = {
+                text: text,
+                sender: 'support',
+                timestamp: serverTimestamp()
+            };
+
+            push(ref(db, `chats/${id}/messages`), msgData);
+
+            // Update session
+            set(ref(db, `chat_sessions/${id}/lastMessage`), text);
+            set(ref(db, `chat_sessions/${id}/timestamp`), serverTimestamp());
+            set(ref(db, `chat_sessions/${id}/lastSender`), 'support');
+
+            input.value = '';
+        }
+
+        window.closeSession = (id) => {
+            if (confirm("Are you sure you want to end this chat session?")) {
+                set(ref(db, `chat_sessions/${id}/status`), 'closed');
+                // Optional: delete or archive
+                location.reload();
+            }
+        };
+
+    </script>
+</body>
+</html>

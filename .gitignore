@@ -1,0 +1,9 @@
+node_modules/
+.env
+.idea/
+.firebase/
+server.log
+server.err
+functions/node_modules/
+kopokopo-backend/node_modules/
+*.lnk

@@ -1,0 +1,3341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/googlefav.png">
+    <link rel="shortcut icon" href="/googlefav.png">
+    <link rel="apple-touch-icon" href="/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Modish Mix Store - Every Product Delivered to You</title>
+    <meta name="description" content="Modish Mix Store - Shop the best products and get them delivered to your doorstep.">
+
+    <!-- Open Graph / Facebook / YouTube -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://modishmixstore.web.app/">
+    <meta property="og:title" content="Modish Mix Store - Every Product Delivered to You">
+    <meta property="og:description" content="Shop the best products and get them delivered to your doorstep.">
+    <meta property="og:image" content="https://modishmixstore.web.app/googlefav.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Modish Mix Store">
+    <meta property="twitter:description" content="Every Product Delivered to You">
+    <meta property="twitter:image" content="https://modishmixstore.web.app/googlefav.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <style>
+        /* Only Critical Inline styles if any, or keep it empty */
+    </style>
+
+<script>
+window.LAZY_PRODUCTS_LIMIT = 12;
+
+const PRODUCT_BASIC_FIELDS = [
+  "id",
+  "name",
+  "price",
+  "thumb",
+  "category",
+  "inStock",
+  "tag"
+];
+
+const FIREBASE_SPEED_CONFIG = {
+  homepage: {
+    loadOnly: [
+      "name",
+      "price",
+      "thumbnail",
+      "productId",
+      "category",
+      "stockStatus",
+      "tag"
+    ]
+  },
+  lazyLoadOnProductOpen: [
+    "gallery",
+    "description",
+    "specifications",
+    "reviews",
+    "ratings",
+    "videos",
+    "relatedProducts"
+  ]
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    document.body.classList.add("app-ready");
+
+    // Remove any forced loading overlays
+    const splash = document.getElementById("appSplashScreen");
+    if (splash) splash.remove();
+
+    // Fast image optimization
+    document.querySelectorAll("img").forEach(img => {
+        img.loading = "lazy";
+        img.decoding = "async";
+
+        if (!img.src.includes(".webp") && !img.src.startsWith("data:")) {
+            img.dataset.original = img.src;
+        }
+    });
+
+    console.log("⚡ Optimized Store Loaded Instantly");
+});
+</script>
+
+<style>
+#appSplashScreen{
+    display:none !important;
+}
+
+body.app-ready{
+    opacity:1 !important;
+    visibility:visible !important;
+}
+
+.product-card{
+    contain:content;
+}
+
+img{
+    image-rendering:auto;
+}
+
+.product-grid{
+    content-visibility:auto;
+}
+
+.image-placeholder-box img{
+    object-fit:cover;
+    aspect-ratio:1/1;
+}
+
+/* Out of Stock Switching Text */
+.out-of-stock-badge {
+    background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 30px;
+    font-weight: 800;
+    font-size: 0.65rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 20px rgba(255, 71, 87, 0.4);
+    text-align: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(5px);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.notify-now {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    border: none;
+    color: white;
+    box-shadow: 0 10px 20px rgba(52, 152, 219, 0.3);
+    height: 50px;
+    border-radius: 12px;
+    display: none; /* Controlled by JS */
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.notify-now:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 15px 30px rgba(52, 152, 219, 0.4) !important;
+    background: linear-gradient(135deg, #3ea2e4 0%, #2c89c7 100%) !important;
+}
+
+.notify-now i {
+    font-size: 1.1rem;
+    animation: bell-shake 2s infinite ease-in-out;
+}
+
+@keyframes bell-shake {
+    0%, 100% { transform: rotate(0); }
+    10%, 30% { transform: rotate(15deg); }
+    20%, 40% { transform: rotate(-15deg); }
+    50% { transform: rotate(0); }
+}
+
+.text-switcher {
+    display: grid;
+    height: 16px;
+    overflow: hidden;
+    position: relative;
+}
+
+.text-switcher span {
+    grid-column: 1;
+    grid-row: 1;
+    animation: stockSlide 4s infinite;
+    white-space: nowrap;
+}
+
+.text-switcher span:nth-child(2) {
+    animation-delay: 2s;
+    opacity: 0;
+}
+
+@keyframes stockSlide {
+    0%, 40% { transform: translateY(0); opacity: 1; }
+    45%, 50% { transform: translateY(-15px); opacity: 0; }
+    90%, 100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes stockSlide2 {
+    0%, 40% { transform: translateY(15px); opacity: 0; }
+    45%, 90% { transform: translateY(0); opacity: 1; }
+    95%, 100% { transform: translateY(-15px); opacity: 0; }
+}
+
+.size-chip, .colour-chip {
+    padding: 6px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: white;
+    color: #475569;
+}
+
+.size-chip:hover, .colour-chip:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+}
+
+.size-chip.active, .colour-chip.active {
+    background: var(--gold-gradient);
+    border-color: transparent;
+    color: #0b004f;
+    box-shadow: 0 4px 10px rgba(212, 175, 55, 0.3);
+}
+
+.text-switcher span:nth-child(2) {
+    animation: stockSlide2 4s infinite;
+}
+</style>
+
+</head>
+<body>
+
+    <div class="top-announcement" id="topAnnouncement">
+        Loading announcement...
+    </div>
+
+
+
+    <div class="drawer-overlay" id="drawerOverlay"></div>
+
+    <nav class="side-drawer" id="sideDrawer">
+        <div class="drawer-header">
+            <img loading="lazy" decoding="async" src="favicon.png" alt="Logo" class="drawer-logo">
+            <div class="brand-name-group"><h1>MODISH MIX<span> STORE</span></h1></div>
+        </div>
+        <div class="drawer-title"><i class="fa-solid fa-bars-staggered"></i> Store Categories</div>
+        <ul class="drawer-menu" id="drawerMenu">
+            <li class="drawer-item"><a href="#" onclick="filterByCategory('All')"><i class="fa-solid fa-border-all"></i> All Products</a></li>
+            <li class="drawer-item"><a href="javascript:void(0)" onclick="openTrackingPage()"><i class="fa-solid fa-truck-fast"></i> Track My Order</a></li>
+            <!-- Dynamically populated -->
+        </ul>
+    </nav>
+
+    <header>
+        <div class="header-top-row">
+            <div style="display: flex; justify-content: flex-start;">
+                <button class="hamburger-btn" id="menuBtn" onclick="toggleDrawer()"><span></span><span></span><span></span></button>
+            </div>
+
+            <div class="brand-logo-container">
+                <img loading="lazy" decoding="async" src="favicon.png" alt="MMS Logo" class="brand-logo-img">
+                <div class="brand-name-group">
+                    <h1>MODISH MIX<span> STORE</span></h1>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="openTrackingPage()" class="cart-trigger-btn" title="Track My Order">
+                    <i class="fa-solid fa-truck-fast"></i>
+                </button>
+                <button onclick="viewCart()" class="cart-trigger-btn">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span id="cartBadge">0</span>
+                </button>
+            </div>
+        </div>
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <input type="text" id="searchInput" placeholder="Search premium products..." oninput="handleSearch()">
+            </div>
+            <button class="search-btn"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+    </header>
+
+    <div class="hot-sell-banner" id="hotSellBanner" style="display: none;">
+        <div class="hot-sell-label"><div class="live-dot"></div>Hot Deal</div>
+        <div class="hot-sell-slider" id="hotSellSlider">
+            <!-- Items injected by JS -->
+        </div>
+    </div>
+
+    <!-- Floating Find Me Bar (Hidden from top by default) -->
+    <div class="find-me-bar" id="findMeBar" onclick="openFindMeModal()">
+        <div class="find-me-label"><div class="live-dot gold-dot"></div>SOURCING</div>
+        <div class="find-me-bar-content">
+            <i class="fa-solid fa-magnifying-glass-plus"></i>
+            <span id="findMeBarText">Can't find what you want? 😊</span>
+        </div>
+    </div>
+
+    <div id="mainContent">
+        <div id="showroomSection">
+            <div class="filter-toolbar">
+                <div class="filter-label"><i class="fa-solid fa-sliders"></i> Filter</div>
+                <select class="sort-select" onchange="handleSort(this.value)">
+                    <option value="latest">Sort by latest</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                </select>
+            </div>
+
+            <!-- Wishlist Horizontal Section (Moved up for visibility) -->
+            <div id="wishlistSection" class="category-section" style="display: none; margin: 0 4% 20px 4%;">
+                <div class="category-header-bar" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+                    <h2 style="color: #d63031;"><i class="fa-solid fa-heart"></i> Your Wishlist</h2>
+                    <span class="see-all-link" style="color: #d63031;">Saved Items</span>
+                </div>
+                <div id="wishlistContainer" class="horizontal-scroll-container">
+                    <!-- Wishlist items will be injected here -->
+                </div>
+            </div>
+
+            <main class="showroom-container">
+                <!-- Subcategory Filter Bar -->
+                <div id="subCategoryFilterBar" class="subcategory-bar" style="display: none;"></div>
+
+                <div class="product-grid" id="mainProductGrid">
+                    <!-- Skeleton placeholders -->
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                </div>
+            </main>
+
+            <!-- Store Policies Section -->
+            <div id="storePolicies" class="policies-section">
+                <div class="policy-grid">
+                    <div class="policy-item" onclick="openPolicyModal('delivery')" style="cursor: pointer; transition: transform 0.2s ease;">
+                        <h3><i class="fa-solid fa-truck-fast"></i> Delivery Policy <i class="fa-solid fa-chevron-right" style="font-size: 0.7rem; margin-left: auto; opacity: 0.5;"></i></h3>
+                        <p id="displayDelivery">1-5 days. Payment on Delivery is strictly limited to Eldoret town.</p>
+                        <span style="font-size: 0.75rem; color: var(--gold); font-weight: 700; text-transform: uppercase; margin-top: 8px; display: block;">View Full Policy <i class="fa-solid fa-arrow-right"></i></span>
+                    </div>
+                    <div class="policy-item" onclick="openPolicyModal('buying')" style="cursor: pointer; transition: transform 0.2s ease;">
+                        <h3><i class="fa-solid fa-clipboard-list"></i> Buying Procedure <i class="fa-solid fa-chevron-right" style="font-size: 0.7rem; margin-left: auto; opacity: 0.5;"></i></h3>
+                        <p id="displayBuying">Simple 3-step process: Select, Pay, and Receive. Click to see details.</p>
+                        <span style="font-size: 0.75rem; color: var(--gold); font-weight: 700; text-transform: uppercase; margin-top: 8px; display: block;">How to Buy <i class="fa-solid fa-arrow-right"></i></span>
+                    </div>
+                    <div class="policy-item" onclick="openPolicyModal('return')" style="cursor: pointer; transition: transform 0.2s ease;">
+                        <h3><i class="fa-solid fa-rotate-left"></i> Return & Refund <i class="fa-solid fa-chevron-right" style="font-size: 0.7rem; margin-left: auto; opacity: 0.5;"></i></h3>
+                        <p>Learn about our 100% genuine product guarantee and warranty claims via Carlcare.</p>
+                        <span style="font-size: 0.75rem; color: var(--gold); font-weight: 700; text-transform: uppercase; margin-top: 8px; display: block;">View Policy <i class="fa-solid fa-arrow-right"></i></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Professional Footer -->
+    <footer id="footerContacts">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <img loading="lazy" decoding="async" src="favicon.png" alt="MMS Logo" class="brand-logo-img footer-logo">
+                <h2>MODISH MIX<span> STORE</span></h2>
+                <p style="color: #a0a0b8; line-height: 1.4; margin-bottom: 15px; font-size: 0.85rem;">Your premium destination for quality products delivered right to your doorstep. Excellence in every package and reliability in every service.</p>
+                <div class="footer-socials" style="display: flex; flex-direction: row; gap: 15px; justify-content: center;">
+                    <a href="https://wa.me/254722635443" style="color: var(--gold); font-size: 1.2rem;" target="_blank"><i class="fa-brands fa-whatsapp"></i></a>
+                    <a href="https://www.facebook.com/share/1B5dtxZLaM/" style="color: var(--gold); font-size: 1.2rem;" target="_blank"><i class="fa-brands fa-facebook"></i></a>
+                    <a href="https://www.instagram.com/modishmixstore?igsh=MTR1aDZheXZ6djRlZQ==" style="color: var(--gold); font-size: 1.2rem;" target="_blank"><i class="fa-brands fa-instagram"></i></a>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="footer-title">Customer Service</h3>
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <i class="fa-solid fa-phone"></i>
+                        <span>0707891551 / 0722635443</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fa-solid fa-envelope"></i>
+                        <span>storemodishmix@gmail.com</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <span>Eldoret Town, Kenya</span>
+                    </div>
+                </div>
+                <div class="service-hours">
+                    <h4 style="color: var(--gold); font-size: 0.9rem; margin-bottom: 10px; text-transform: uppercase;">Business Hours</h4>
+                    <p style="color: #a0a0b8; font-size: 0.85rem; margin-bottom: 5px;">Mon - Fri: 9:00 AM - 5:30 PM</p>
+                    <p style="color: #a0a0b8; font-size: 0.85rem; margin-bottom: 5px;">Sat: 9:00 AM - 12:30 PM</p>
+                    <p style="color: #a0a0b8; font-size: 0.85rem;">Sun: Closed</p>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="footer-title">Quick Links</h3>
+                <ul class="footer-links">
+                    <li><a href="javascript:void(0)" onclick="returnToMainShowroom()">Home</a></li>
+                    <li><a href="javascript:void(0)" onclick="openTrackingPage()">Track My Order</a></li>
+                    <li><a href="javascript:void(0)" onclick="openPolicyModal('about')">About Us</a></li>
+                    <li><a href="#footerContacts">Contacts</a></li>
+                    <li><a href="javascript:void(0)" onclick="openPolicyModal('return')">Return & Refund Policy</a></li>
+                    <li><a href="javascript:void(0)" onclick="openPolicyModal('terms')">Shipping & Delivery Policy</a></li>
+                    <li><a href="javascript:void(0)" onclick="openPolicyModal('privacy')">Privacy Policy</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            &copy; 2026 MODISH MIX STORE. All Rights Reserved. Designed for Excellence.
+        </div>
+    </footer>
+
+    <div class="modal-screen" id="productModal">
+        <div class="modal-body-container">
+            <button class="close-modal-btn" onclick="closeProductDisplay()"><i class="fa-solid fa-xmark"></i></button>
+
+            <div class="modal-main-view-box" style="position: relative;">
+                <div id="modalMainIcon">
+                    <i class="fa-solid fa-box"></i>
+                </div>
+                <div class="wishlist-icon" id="modalWishlistBtn" style="top: 15px; right: 15px;">
+                    <i class="fa-regular fa-heart"></i>
+                </div>
+                <div class="share-btn-top" id="modalShareBtn" style="top: 57px; right: 15px;">
+                    <i class="fa-solid fa-share-nodes"></i>
+                </div>
+            </div>
+
+            <div class="modal-details-content">
+                <div class="modal-gallery-strip" id="modalGallery" style="margin-bottom: 15px; border-bottom: none; padding: 0;">
+                    <!-- Thumbnails will be injected here -->
+                </div>
+                <div class="modal-breadcrumbs" id="modalPath">Home / Category</div>
+                <h2 class="modal-product-title" id="modalTitle">Product Title</h2>
+
+                <div class="modal-price-section">
+                    <span class="modal-large-price" id="modalPrice">KSh 0</span>
+                    <span class="modal-old-price" id="modalOldPrice"></span>
+                    <div id="modalStockStatus" style="font-size: 0.75rem; margin-top: 5px; color: #27ae60; font-weight: 700;">In Stock</div>
+                </div>
+
+                <div class="modal-description-area" id="modalDesc">
+                    <!-- Description will be injected here -->
+                </div>
+
+                <div id="modalOptionsSection" style="margin-bottom: 15px;">
+                    <div id="sizeSelection" style="margin-bottom: 10px; display: none;">
+                        <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 800; color: #64748b; display: block; margin-bottom: 5px;">Select Size</label>
+                        <div id="sizeChips" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                    </div>
+                    <div id="colourSelection" style="margin-bottom: 10px; display: none;">
+                        <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 800; color: #64748b; display: block; margin-bottom: 5px;">Select Colour</label>
+                        <div id="colourChips" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                    </div>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #eee; margin: 10px 0;">
+                    <div style="font-size: 0.75rem; display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        <i class="fa-solid fa-truck-fast" style="color: var(--gold);"></i>
+                        <span><strong>Delivery:</strong> Eldoret (1-2 days), Others (2-5 days)</span>
+                    </div>
+                    <div style="font-size: 0.75rem; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-rotate-left" style="color: var(--gold);"></i>
+                        <span><strong>Returns:</strong> 7 days easy return policy</span>
+                    </div>
+                </div>
+
+                <div class="quantity-and-cart-row" id="modalActionsRow">
+                    <div class="cart-qty-selector">
+                        <button class="cart-qty-btn" onclick="updateQty(-1)"><i class="fa-solid fa-minus"></i></button>
+                        <input class="cart-qty-input" type="text" id="qtyInput" value="1" readonly>
+                        <button class="cart-qty-btn" onclick="updateQty(1)"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <button class="action-trigger-btn add-to-cart" onclick="addToCart()"><i class="fa-solid fa-cart-plus"></i> Add to Cart</button>
+                </div>
+
+                <div style="display: flex; gap: 10px;" id="modalButtonsRow">
+                    <button class="action-trigger-btn buy-now" id="modalBuyBtn" onclick="proceedToCheckoutView()"><i class="fa-solid fa-bolt"></i> Buy Now</button>
+                    <button class="action-trigger-btn chat-now" id="modalChatBtn">
+                        <i class="fa-brands fa-whatsapp"></i> Chat
+                    </button>
+                    <button class="action-trigger-btn notify-now" id="modalNotifyBtn" style="display: none;">
+                        <i class="fa-solid fa-bell"></i>
+                        <div class="text-switcher" style="margin-left: 12px;">
+                            <span style="font-size: 0.85rem; font-weight: 800;">OUT OF STOCK - CLICK TO BOOK</span>
+                            <span style="font-size: 0.85rem; font-weight: 800;">GET RESTOCK ALERT NOW</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="checkout-view-screen" id="cartSection">
+        <h2 style="text-align: center; margin-bottom: 2rem; letter-spacing: 1px;">SHOPPING CART</h2>
+        <div id="cartItemsList">
+            <!-- Cart items will be injected here -->
+        </div>
+        <div class="checkout-card-frame" id="cartSummaryCard" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <span style="font-size: 1.1rem; font-weight: bold; color: white;">Total Amount:</span>
+                <span id="cartTotalDisplay" style="font-size: 1.5rem; color: var(--gold); font-weight: bold;">KSh 0</span>
+            </div>
+            <button class="place-order-submit-btn" onclick="proceedFromCartToCheckout()">
+                Proceed to Checkout <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+        <div id="emptyCartMsg" style="text-align: center; padding: 60px 20px;">
+            <i class="fa-solid fa-cart-shopping" style="font-size: 4rem; color: rgba(255,255,255,0.05); margin-bottom: 20px; display: block;"></i>
+            <p style="color: #a0a0b8; margin-bottom: 30px;">Your cart is currently empty.</p>
+            <button class="action-trigger-btn buy-now" style="max-width: 250px; margin: 0 auto;" onclick="returnToMainShowroom()"><i class="fa-solid fa-magnifying-glass"></i> Browse Products</button>
+        </div>
+    </div>
+
+    <div class="checkout-view-screen" id="checkoutSection">
+        <div class="checkout-alert-header" id="checkoutAlertBar">✓ Product added to cart.</div>
+
+        <h2 style="text-align: center; margin-bottom: 2rem; letter-spacing: 1px;">CHECKOUT DETAILS</h2>
+
+        <form id="checkoutForm" onsubmit="handleFormSubmission(event)">
+            <div class="checkout-card-frame">
+                <h3 class="checkout-section-title">Billing Details</h3>
+                <div class="form-grid-layout">
+                    <div><label class="input-label">First name <span>*</span></label><input type="text" id="billingFirstName" class="checkout-input-field" required></div>
+                    <div><label class="input-label">Last name <span>*</span></label><input type="text" id="billingLastName" class="checkout-input-field" required></div>
+                    <div class="form-group-full"><label class="input-label">Street address / Estate / Building <span>*</span></label><input type="text" id="billingAddress" class="checkout-input-field" required></div>
+                    <div class="form-group-full"><label class="input-label">Town / City <span>*</span></label><input type="text" id="billingTown" class="checkout-input-field" required></div>
+                    <div class="form-group-full">
+                        <label class="input-label">County <span>*</span></label>
+                        <select class="checkout-input-field" id="billingCounty" onchange="updateCheckoutSummary()" required>
+                            <option value="Uasin Gishu">Uasin Gishu (Eldoret)</option>
+                            <option value="Nairobi">Nairobi</option>
+                            <option value="Nakuru">Nakuru</option>
+                        </select>
+                    </div>
+                    <div class="form-group-full"><label class="input-label">Phone Number (M-PESA Target) <span>*</span></label><input type="tel" id="billingPhone" class="checkout-input-field" placeholder="e.g. 0722635443" required></div>
+                    <div class="form-group-full"><label class="input-label">Email address <span>*</span></label><input type="email" id="billingEmail" class="checkout-input-field" required></div>
+                </div>
+            </div>
+
+            <div class="checkout-card-frame">
+                <h3 class="checkout-section-title">Your Order</h3>
+                <table class="order-summary-table">
+                    <thead><tr><th>Product</th><th style="text-align: right;">Subtotal</th></tr></thead>
+                    <tbody>
+                        <tr><td id="summaryProductName">Product Title × 1</td><td style="text-align: right; font-weight: 600;" id="summaryProductSubtotal">KSh 0.00</td></tr>
+                        <tr class="summary-total-row"><td>Total</td><td style="text-align: right;" id="summaryFinalTotal">KSh 0.00</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="checkout-card-frame">
+                <h3 class="checkout-section-title">Payment Method</h3>
+                <label class="payment-method-option">
+                    <input type="radio" name="paymentMethod" value="Lipa na M-PESA" checked onclick="togglePaymentView('mpesa')">
+                    <div class="payment-method-text">
+                        <h4>Lipa na M-PESA <img loading="lazy" decoding="async" src="mpesa%20icone.png" class="mpesa-logo-inline" alt="M-Pesa"></h4>
+                        <p>Instant STK Push validation prompt will switch onto your active Safaricom device interface panel.</p>
+                    </div>
+                </label>
+                <label class="payment-method-option">
+                    <input type="radio" name="paymentMethod" value="Cash on Delivery" onclick="togglePaymentView('pod')">
+                    <div class="payment-method-text">
+                        <h4>Cash on Delivery</h4>
+                        <p>Pay cash or cash transfer upon package arrivals within local areas.</p>
+                    </div>
+                </label>
+
+                <div id="manualTillInfo" style="background: rgba(37, 211, 102, 0.1); border: 1px dashed var(--whatsapp-green); border-radius: 6px; padding: 1rem; margin: 15px 0; text-align: center;">
+                    <h4 style="color: var(--whatsapp-green); font-size: 0.9rem; margin-bottom: 5px;"><i class="fa-solid fa-mobile-screen-button"></i> M-PESA BUY GOODS (Till Fallback)</h4>
+                    <p style="font-size: 1.1rem; font-weight: bold; color: white;">Till: <span id="tillNumber" style="color: var(--gold);">3309609</span> <button type="button" class="copy-btn" onclick="copyTill()"><i class="fa-solid fa-copy"></i> COPY</button></p>
+                    <p style="font-size: 0.75rem; opacity: 0.8; color: white;">If the prompt doesn't appear, use this Till Number manually.</p>
+                </div>
+
+                <button type="submit" class="place-order-submit-btn" id="submitOrderBtn">
+                    <i class="fa-solid fa-lock"></i> <span>Place Order & Pay</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="processing-overlay" id="mpesaLoader">
+        <img src="mpesa%20icone.png" alt="M-Pesa" style="height: 40px; margin-bottom: 15px;">
+        <div class="spinner-ring"></div>
+        <h2 style="color: #2ecc71; margin-bottom: 0.5rem;" id="loaderTitle">Sending M-PESA STK Push...</h2>
+        <p style="color: #a0a0b8; max-width: 320px;" id="loaderMessage">Please check your phone screen for the Safaricom SIM prompt to enter your PIN to authorize the transaction.</p>
+    </div>
+
+    <div class="bottom-nav-bar">
+        <button class="bottom-nav-item active" id="homeNavItem" onclick="filterByGender('All')">
+            <i class="fa-solid fa-house-chimney"></i>
+            <span>HOME</span>
+        </button>
+        <button class="bottom-nav-item" onclick="toggleDrawer()">
+            <i class="fa-solid fa-bars-staggered"></i>
+            <span>MENU</span>
+        </button>
+        <button class="bottom-nav-item" onclick="viewCart()" style="position: relative;">
+            <i class="fa-solid fa-cart-shopping"></i>
+            <span>CART</span>
+            <span id="cartBadgeBottom" style="position: absolute; top: 2px; right: 20%; background: var(--accent-red); color: white; font-size: 0.65rem; padding: 1px 5px; border-radius: 10px; display: none; font-weight: bold;">0</span>
+        </button>
+        <button class="bottom-nav-item" id="loginBtn" onclick="viewProfile()">
+            <i class="fa-solid fa-circle-user"></i>
+            <span id="loginText">PROFILE</span>
+        </button>
+        <a href="https://wa.me/254722635443" class="bottom-nav-item whatsapp-item" target="_blank">
+            <i class="fa-brands fa-whatsapp"></i>
+            <span>WHATSAPP</span>
+        </a>
+    </div>
+
+    <!-- Find Me Modal -->
+    <div class="modal-screen" id="findMeModal">
+        <div class="modal-body-container" style="max-width: 500px; padding: 2rem;">
+            <button class="close-modal-btn" onclick="closeFindMeModal()"><i class="fa-solid fa-xmark"></i></button>
+            <h2 style="color: var(--deep-blue); margin-bottom: 1.5rem; font-weight: 800; text-transform: uppercase; border-bottom: 2px solid var(--gold); padding-bottom: 10px; font-size: 1.2rem;">
+                <i class="fa-solid fa-search-plus"></i> Find This For Me
+            </h2>
+            <div style="color: #333; line-height: 1.6; font-size: 0.95rem;">
+                <p style="color: #666; margin-bottom: 20px; font-size: 0.9rem;">Can't find what you're looking for? Describe it to us! We'll source it for you at a <strong>reasonable and competitive price</strong>.</p>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.85rem; color: var(--deep-blue); font-weight: 700;">Product Description</label>
+                    <textarea id="findMeDesc" placeholder="e.g. White noise-canceling headphones, specific brand, or model..." style="width: 100%; padding: 12px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; color: #333; min-height: 100px; font-family: inherit;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.85rem; color: var(--deep-blue); font-weight: 700;">Upload Reference Image (Optional)</label>
+                    <input type="file" id="findMeImage" accept="image/*" style="width: 100%; color: #666; font-size: 0.8rem;">
+                    <p style="font-size: 0.75rem; color: #888; margin-top: 5px;">*Images will be shared via WhatsApp for verification.</p>
+                </div>
+
+                <div style="background: rgba(241, 196, 15, 0.1); border-left: 4px solid var(--gold); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                    <p style="font-size: 0.85rem; color: #444; line-height: 1.4;">
+                        <i class="fa-solid fa-shield-check" style="color: var(--gold);"></i> <strong>Our Assurance:</strong> We use our extensive supplier network to find the best quality at the lowest possible market price.
+                    </p>
+                </div>
+
+                <button onclick="handleFindMeSubmit()" class="action-trigger-btn buy-now" style="width: 100%; background: var(--whatsapp-green); color: white; border: none;">
+                    <i class="fa-brands fa-whatsapp"></i> REQUEST VIA WHATSAPP
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Policy Modal -->
+    <div class="modal-screen" id="policyModal">
+        <div class="modal-body-container" style="max-width: 500px; padding: 2rem;">
+            <button class="close-modal-btn" onclick="closePolicyModal()"><i class="fa-solid fa-xmark"></i></button>
+            <h2 id="policyModalTitle" style="color: var(--deep-blue); margin-bottom: 1.5rem; font-weight: 800; text-transform: uppercase; border-bottom: 2px solid var(--gold); padding-bottom: 10px; font-size: 1.2rem;">Policy Title</h2>
+            <div id="policyModalContent" style="color: #333; line-height: 1.6; font-size: 0.95rem;">
+                <!-- Content injected -->
+            </div>
+            <button class="action-trigger-btn buy-now" style="margin-top: 2rem;" onclick="closePolicyModal()">CLOSE</button>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="modal-screen" id="authModal">
+        <div class="auth-card">
+            <button class="close-modal-btn" onclick="closeAuthModal()"><i class="fa-solid fa-xmark"></i></button>
+
+            <div class="auth-header">
+                <img src="favicon.png" alt="Logo" class="auth-logo">
+                <h2 class="auth-brand-name">MODISH MIX</h2>
+            </div>
+
+            <div class="auth-tabs-container">
+                <button id="loginTab" class="auth-tab active" onclick="switchAuthTab('login')"><i class="fa-solid fa-right-to-bracket"></i> LOGIN</button>
+                <button id="signupTab" class="auth-tab" onclick="switchAuthTab('signup')"><i class="fa-solid fa-user-plus"></i> SIGNUP</button>
+            </div>
+
+            <form id="authForm" class="auth-form" onsubmit="handleAuthSubmit(event)">
+                <div id="signupFields" style="display: none;">
+                    <div class="form-group">
+                        <label class="auth-label">Full Name</label>
+                        <input type="text" id="authName" class="auth-input" placeholder="Enter your full name">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="auth-label">Email Address</label>
+                    <input type="email" id="authEmail" class="auth-input" placeholder="name@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="auth-label">Password</label>
+                    <input type="password" id="authPassword" class="auth-input" placeholder="••••••••" required>
+                </div>
+                <div id="forgotPasswordLink" class="forgot-password-link">
+                    <a href="javascript:void(0)" onclick="handleForgotPassword()">Forgot Password?</a>
+                </div>
+
+                <div id="consentField" class="form-group" style="display: none; align-items: flex-start; gap: 10px; margin-top: 1rem;">
+                    <input type="checkbox" id="authTermsConsent" style="width: 18px; height: 18px; cursor: pointer; margin-top: 2px;">
+                    <label for="authTermsConsent" style="color: #a0a0b8; font-size: 0.85rem; line-height: 1.4; cursor: pointer;">
+                        I agree to the <a href="javascript:void(0)" onclick="openPolicyModal('terms')" style="color: var(--gold); text-decoration: underline;">Shipping & Delivery Policy</a>
+                        and <a href="javascript:void(0)" onclick="openPolicyModal('privacy')" style="color: var(--gold); text-decoration: underline;">Privacy Policy</a>.
+                    </label>
+                </div>
+
+                <button type="submit" id="authSubmitBtn" class="auth-submit-btn">
+                    <i class="fa-solid fa-right-to-bracket"></i> <span>LOGIN</span>
+                </button>
+            </form>
+
+            <div class="auth-divider">
+                <span>OR</span>
+            </div>
+
+            <button onclick="firebaseGoogleLogin()" class="google-login-btn">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                Continue with Google
+            </button>
+        </div>
+    </div>
+
+    <div class="checkout-view-screen" id="trackingSection">
+        <div class="checkout-card-frame" style="text-align: center; padding: 2.5rem 1.5rem;">
+            <button class="close-modal-btn" onclick="returnToMainShowroom()" style="top: 10px; right: 10px;"><i class="fa-solid fa-xmark"></i></button>
+            <div style="margin-bottom: 1.5rem;">
+                <i class="fa-solid fa-truck-fast" style="font-size: 3.5rem; color: var(--gold); text-shadow: 0 0 20px rgba(241, 196, 15, 0.3);"></i>
+            </div>
+            <h2 style="color: white; margin-bottom: 0.5rem; font-size: 1.6rem; letter-spacing: 1px;">Track Your Order</h2>
+            <p style="color: #a0a0b8; margin-bottom: 2rem; font-size: 0.9rem;">Enter your Order ID or Phone Number to check status</p>
+
+            <div style="max-width: 400px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group" style="text-align: left;">
+                    <label class="auth-label">Order Reference / Phone</label>
+                    <input type="text" id="trackInput" class="auth-input" placeholder="e.g. -NX_... or 0712..." style="text-align: center; letter-spacing: 1px;">
+                </div>
+                <button class="auth-submit-btn" onclick="handleTrackOrder()">
+                    <i class="fa-solid fa-magnifying-glass"></i> TRACK ORDER
+                </button>
+                <button class="action-trigger-btn" style="background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #a0a0b8; margin-top: 10px;" onclick="returnToMainShowroom()">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Shop
+                </button>
+            </div>
+        </div>
+
+        <div id="trackingResult" class="checkout-card-frame" style="display: none; padding: 0; overflow: hidden;">
+            <!-- Track Result Content Injected Here -->
+        </div>
+    </div>
+
+    <div class="checkout-view-screen" id="profileSection">
+        <div class="profile-main-container">
+            <!-- Profile Header Card -->
+            <div class="profile-header-glass">
+                <div class="profile-avatar-wrapper">
+                    <img id="profilePic" src="" alt="Profile" class="profile-avatar-img" style="display: none;">
+                    <i id="profilePlaceholder" class="fa-solid fa-user-circle profile-avatar-placeholder"></i>
+                </div>
+                <div class="profile-info-group">
+                    <h2 id="profileName" class="profile-user-name">Guest User</h2>
+                    <p id="profileEmail" class="profile-user-email">Sign in to sync your orders</p>
+                    <div class="profile-badge-vip">
+                        <i class="fa-solid fa-crown"></i> Modish VIP
+                    </div>
+                </div>
+                <i class="fa-solid fa-gear profile-settings-icon"></i>
+            </div>
+
+            <!-- Order Status Card -->
+            <div class="profile-card-modular">
+                <div class="card-header-flex">
+                    <h3 class="card-title-sm">My Orders</h3>
+                    <a href="#" class="view-all-link" onclick="openTrackingPage()">View All <i class="fa-solid fa-chevron-right"></i></a>
+                </div>
+                <div class="order-status-grid">
+                    <button class="status-item-btn">
+                        <div class="status-icon-box">
+                            <i class="fa-solid fa-wallet"></i>
+                            <span class="status-badge-count" style="display: none;">0</span>
+                        </div>
+                        <span class="status-label-xs">To Pay</span>
+                    </button>
+                    <button class="status-item-btn">
+                        <div class="status-icon-box">
+                            <i class="fa-solid fa-box"></i>
+                            <span class="status-badge-count" style="display: none;">0</span>
+                        </div>
+                        <span class="status-label-xs">To Ship</span>
+                    </button>
+                    <button class="status-item-btn">
+                        <div class="status-icon-box">
+                            <i class="fa-solid fa-truck"></i>
+                            <span class="status-badge-count" style="display: none;">0</span>
+                        </div>
+                        <span class="status-label-xs">Received</span>
+                    </button>
+                    <button class="status-item-btn">
+                        <div class="status-icon-box">
+                            <i class="fa-solid fa-star-half-stroke"></i>
+                            <span class="status-badge-count" style="display: none;">0</span>
+                        </div>
+                        <span class="status-label-xs">To Review</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Assets Card -->
+            <div class="profile-card-modular">
+                <div class="assets-row-grid">
+                    <div class="asset-item-box">
+                        <span class="asset-value">0</span>
+                        <span class="asset-label">Coupons</span>
+                    </div>
+                    <div class="asset-item-box">
+                        <span class="asset-value">0</span>
+                        <span class="asset-label">Vouchers</span>
+                    </div>
+                    <div class="asset-item-box">
+                        <span class="asset-value">KES 0</span>
+                        <span class="asset-label">Credit</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Services Card -->
+            <div class="profile-card-modular">
+                <h3 class="card-title-sm" style="margin-bottom: 1.25rem;">My Services</h3>
+                <div class="services-modular-grid">
+                    <button class="service-btn-item" onclick="openPolicyModal('delivery')">
+                        <div class="service-icon-circle"><i class="fa-solid fa-shield-heart"></i></div>
+                        <span class="service-name-xs">Support</span>
+                    </button>
+                    <button class="service-btn-item" onclick="openPolicyModal('returns')">
+                        <div class="service-icon-circle"><i class="fa-solid fa-rotate-left"></i></div>
+                        <span class="service-name-xs">Returns</span>
+                    </button>
+                    <button class="service-btn-item" onclick="openLocationPicker()" style="position: relative; overflow: visible; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 90px; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+                        <div class="service-icon-circle" style="background: linear-gradient(135deg, #0b004f 0%, #1a0066 100%); color: white; border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 8px 25px rgba(11, 0, 79, 0.5); transform: scale(1.2); animation: gentle-float 3s ease-in-out infinite;">
+                            <i class="fa-solid fa-map-location-dot" style="font-size: 1.2rem;"></i>
+                            <!-- Small pulsing dot for attention -->
+                            <span style="position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; background: #2ecc71; border-radius: 50%; border: 2px solid white; animation: pulse-green 1.5s infinite; box-shadow: 0 0 15px rgba(46, 204, 113, 0.6);"></span>
+                        </div>
+                        <span class="service-name-xs" style="font-weight: 900; color: #0b004f; margin-top: 14px; font-size: 0.75rem; letter-spacing: 0.8px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); display: block;">DELIVERY PIN</span>
+                        <div style="font-size: 0.55rem; background: #2ecc71; color: white; padding: 1px 6px; border-radius: 10px; font-weight: 800; text-transform: uppercase; margin-top: 2px; letter-spacing: 1px; animation: text-glow 2s ease-in-out infinite; box-shadow: 0 2px 5px rgba(46, 204, 113, 0.3);">PRECISION PRO</div>
+                    </button>
+                    <button class="service-btn-item" style="color: var(--accent-red);" onclick="firebaseLogout()">
+                        <div class="service-icon-circle" style="color: var(--accent-red);"><i class="fa-solid fa-power-off"></i></div>
+                        <span class="service-name-xs">Logout</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recommendations Section -->
+            <h3 class="recommend-title-centered">JUST FOR YOU</h3>
+            <div id="profileRecommendations" class="product-grid" style="padding: 0 5px;">
+                <!-- Recommended products will be injected here -->
+            </div>
+
+            <div style="padding: 1rem; text-align: center;">
+                <button class="action-trigger-btn buy-now" onclick="returnToMainShowroom()" style="max-width: 300px; margin: 0 auto;">
+                    <i class="fa-solid fa-bag-shopping"></i> Continue Shopping
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Modal -->
+    <div id="mapModal" class="policy-modal-overlay">
+        <div class="policy-modal-container" style="max-width: 500px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+            <!-- Professional Header -->
+            <div class="policy-modal-header" style="background: linear-gradient(135deg, #0b004f 0%, #1a0066 100%); color: white; padding: 18px 20px; display: flex; align-items: center; gap: 15px; border-bottom: 2px solid rgba(255,255,255,0.1); position: relative;">
+                <div style="background: white; width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.2);">
+                    <img src="favicon.png" alt="Logo" style="width: 80%; height: 80%; object-fit: contain;">
+                </div>
+                <div style="flex: 1;">
+                    <h3 style="margin: 0; font-size: 1.2rem; letter-spacing: 0.8px; font-weight: 800; text-transform: uppercase; font-family: 'Inter', sans-serif;">MODISH MIX STORE</h3>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                        <span style="width: 6px; height: 6px; background: #2ecc71; border-radius: 50%; box-shadow: 0 0 8px #2ecc71;"></span>
+                        <span style="font-size: 0.7rem; opacity: 0.9; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Live Delivery Map</span>
+                    </div>
+                </div>
+                <div onclick="closeMapModal()" style="width: 32px; height: 32px; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; border: 1px solid rgba(255,255,255,0.2);">
+                    <i class="fa-solid fa-xmark" style="font-size: 1.1rem; color: white;"></i>
+                </div>
+            </div>
+
+            <div class="policy-modal-body" style="flex: 1; padding: 0; position: relative; overflow: hidden; background: #f1f5f9;">
+                <div id="map" style="width: 100%; height: 100%;"></div>
+
+                <!-- Professional GPS Control -->
+                <button onclick="recenterOnGPS()" title="Find My Location" style="position: absolute; top: 15px; right: 15px; z-index: 1000; background: white; border: 1px solid #e2e8f0; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(0,0,0,0.15); cursor: pointer; transition: transform 0.2s active;">
+                    <i class="fa-solid fa-location-arrow" style="color: #0b004f; font-size: 1.2rem;"></i>
+                </button>
+
+                <!-- Status Tooltip -->
+                <div style="position: absolute; top: 15px; left: 15px; z-index: 1000; background: rgba(11, 0, 79, 0.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); color: white; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                    <p style="margin: 0; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-hand-pointer" style="color: #f1c40f;"></i> TAP TO MOVE PIN
+                    </p>
+                </div>
+
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 25px 20px; z-index: 1000; background: linear-gradient(to top, rgba(255,255,255,1) 80%, rgba(255,255,255,0));">
+                    <div style="background: #fff; padding: 15px; border-radius: 18px; box-shadow: 0 -10px 25px rgba(0,0,0,0.05); border: 1px solid #edf2f7;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-left: 4px;">Delivery Point Name</label>
+                        <input type="text" id="locationNameInput" placeholder="Home, Office, Near Post Office..."
+                            style="width: 100%; padding: 14px; border-radius: 12px; border: 1.5px solid #e2e8f0; background: #f8fafc; font-size: 0.95rem; box-sizing: border-box; transition: border-color 0.3s; margin-bottom: 15px; outline: none;">
+
+                        <button id="pinLocationBtn" class="action-trigger-btn buy-now" onclick="savePinnedLocation()" style="width: 100%; height: 50px; background: linear-gradient(135deg, #0b004f 0%, #1a0066 100%); border: none; color: white; border-radius: 12px; font-weight: 800; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 10px 20px rgba(11, 0, 79, 0.3); cursor: pointer; margin: 0;">
+                            <i class="fa-solid fa-location-check"></i> CONFIRM THIS LOCATION
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="toast-notification">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toastMessage">Added to cart successfully!</span>
+    </div>
+
+    <script type="module">
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, sendEmailVerification, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+// Optimized lightweight homepage loading enabled
+// Use Firestore basic product docs + lazy product details fetching
+        import { getDatabase, ref, onValue, update, increment, push, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDeuy7YfMZ-FXM4-SrIKFO3IKpyB0OEJVA",
+            authDomain: "school-system-a97a4.firebaseapp.com",
+            databaseURL: "https://school-system-a97a4-default-rtdb.firebaseio.com",
+            projectId: "school-system-a97a4",
+            storageBucket: "school-system-a97a4.firebasestorage.app",
+            messagingSenderId: "105805138185",
+            appId: "1:105805138185:web:a2ab11e5ff1359cb69ebd8",
+            measurementId: "G-3E9DVVRD6J"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        const sideDrawer = document.getElementById('sideDrawer');
+        const menuBtn = document.getElementById('menuBtn');
+        const drawerOverlay = document.getElementById('drawerOverlay');
+        const productModal = document.getElementById('productModal');
+        const showroomSection = document.getElementById('showroomSection');
+        const checkoutSection = document.getElementById('checkoutSection');
+        const cartSection = document.getElementById('cartSection');
+        const profileSection = document.getElementById('profileSection');
+        const mpesaLoader = document.getElementById('mpesaLoader');
+        const pGrid = document.getElementById('mainProductGrid');
+
+        // --- GLOBAL STATE ---
+        let currentUser = null;
+        let currentItem = {};
+        let allProducts = [];
+        let currentCategory = 'All';
+        let currentSubCategory = 'All';
+        let currentGender = 'All';
+        let cart = JSON.parse(localStorage.getItem('mms_cart')) || [];
+        let selectedSize = null;
+        let selectedColour = null;
+        let totalAmount = 0;
+        let initialLoad = true;
+        let hotSellInterval = null;
+        let currentHotSellIndex = 0;
+        let authMode = 'login';
+
+        // --- DELIVERY LOGIC ---
+        function calculateDeliveryFee(total, county) {
+            // Refined logic: Local discount for Uasin Gishu
+            if (county === "Uasin Gishu") {
+                return total >= 2500 ? 0 : 150;
+            }
+            // Standard shipping for other counties
+            return total >= 5000 ? 0 : 300;
+        }
+
+        // --- CACHE HELPERS ---
+        const cacheData = (key, data) => {
+            const cacheKey = `mms_cache_${key}`;
+            try {
+                let dataToCache = data;
+                // Limit products cache to 15 items to save space
+                if (key === 'products' && Array.isArray(data)) dataToCache = data.slice(0, 15);
+
+                localStorage.setItem(cacheKey, JSON.stringify({ data: dataToCache, timestamp: Date.now() }));
+            } catch (e) {
+                console.warn("⚡ Cache Quota Exceeded. Purging and retrying...", key);
+                // Purge ALL mms_cache_ items to clear space
+                Object.keys(localStorage).forEach(k => {
+                    if (k.startsWith('mms_cache_')) localStorage.removeItem(k);
+                });
+
+                // Retry once after purging
+                try {
+                    localStorage.setItem(cacheKey, JSON.stringify({ data: data, timestamp: Date.now() }));
+                } catch (retryError) {
+                    console.error("❌ Critical Cache Failure:", key);
+                }
+            }
+        };
+        const getCache = (key) => {
+            try { return JSON.parse(localStorage.getItem(`mms_cache_${key}`)); }
+            catch (e) { return null; }
+        };
+
+        // --- INITIAL CACHE LOADING ---
+        const cachedStoreInfo = getCache('storeInfo');
+        if (cachedStoreInfo) {
+            const data = cachedStoreInfo.data;
+            setTimeout(() => {
+                if (data.announcement) document.getElementById('topAnnouncement').innerHTML = data.announcement;
+                if (data.deliveryPolicy) document.getElementById('displayDelivery').innerText = data.deliveryPolicy;
+                if (data.buyingProcedure) document.getElementById('displayBuying').innerText = data.buyingProcedure;
+            }, 0);
+        }
+
+        const cachedProducts = getCache('products');
+        if (cachedProducts && cachedProducts.data) {
+            allProducts = cachedProducts.data;
+            setTimeout(() => {
+                filterAndRender();
+                setupHotSellDisplay();
+            }, 50);
+        }
+
+        const cachedCats = getCache('categories');
+        const cachedSubs = getCache('subcategories');
+        if (cachedCats && cachedCats.data) {
+            setTimeout(() => {
+                renderDrawerMenu(cachedCats.data, cachedSubs ? cachedSubs.data : null);
+            }, 100);
+        }
+
+        // --- AUTH LOGIC ---
+        onAuthStateChanged(auth, (user) => {
+            const loginText = document.getElementById('loginText');
+            if (user) {
+                currentUser = user;
+                if (!user.isAnonymous) {
+                    loginText.innerText = "PROFILE";
+                    saveUserProfile(user);
+                    // Pre-fill checkout if info exists
+                    fetchUserProfile(user.uid);
+                } else {
+                    loginText.innerText = "ACCOUNT";
+                }
+            } else {
+                currentUser = null;
+                loginText.innerText = "ACCOUNT";
+                // Silently sign in anonymously to ensure every guest has a UID for tracking/orders
+                signInAnonymously(auth).catch(err => {
+                    if (err.code === 'auth/admin-restricted-operation') {
+                        console.error("❌ Firebase Error: Anonymous Auth is disabled. Enable it in Firebase Console > Authentication > Sign-in method.");
+                    } else {
+                        console.error("Anonymous auth failed:", err);
+                    }
+                });
+            }
+        });
+
+        window.updateBottomNavActive = (index) => {
+            const items = document.querySelectorAll('.bottom-nav-item');
+            items.forEach((item, i) => {
+                if (i === index) item.classList.add('active');
+                else item.classList.remove('active');
+            });
+        };
+
+        window.openTrackingPage = (isPopStateProcessing = false) => {
+            updateBottomNavActive(3);
+            closeProductDisplay(true);
+            checkoutSection.classList.remove('active');
+            cartSection.classList.remove('active');
+            profileSection.classList.remove('active');
+            showroomSection.style.display = "none";
+            document.getElementById('trackingSection').classList.add('active');
+            document.body.classList.add('overlay-active');
+            window.scrollTo(0, 0);
+            if (!isPopStateProcessing) pushTemporaryState();
+        };
+
+        let trackingUnsubscribe = null;
+
+        window.handleTrackOrder = () => {
+            const trackInput = document.getElementById('trackInput').value.trim();
+            const trackingResult = document.getElementById('trackingResult');
+
+            if (!trackInput) {
+                showToast("Please enter an Order ID or Phone Number");
+                return;
+            }
+
+            if (trackingUnsubscribe) trackingUnsubscribe(); // Not needed with get(), but keeping for safety
+
+            trackingResult.innerHTML = '<div style="padding: 2rem; color: #a0a0b8;"><i class="fa-solid fa-spinner fa-spin"></i> Searching for orders...</div>';
+            trackingResult.style.display = 'block';
+
+            const ordersRef = ref(db, 'orders');
+
+            // OPTIMIZATION: Use get() instead of onValue() to save connections and bandwidth
+            get(ordersRef).then((snapshot) => {
+                const orders = snapshot.val();
+                if (!orders) {
+                    trackingResult.innerHTML = '<div style="padding: 2rem; color: var(--accent-red);">No orders found in the system.</div>';
+                    return;
+                }
+
+                const results = Object.keys(orders)
+                    .map(key => ({ id: key, ...orders[key] }))
+                    .filter(o => {
+                        const search = trackInput.trim().toLowerCase();
+                        const normalizedInput = trackInput.replace(/\D/g, '');
+                        const oPhone = o.phone ? o.phone.replace(/\D/g, '') : '';
+
+                        const matchesId = o.id && o.id.toLowerCase() === search;
+                        const matchesPhone = normalizedInput.length >= 9 && oPhone.includes(normalizedInput);
+                        const matchesEmail = o.email && o.email.toLowerCase() === search;
+
+                        return matchesId || matchesPhone || matchesEmail;
+                    })
+                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+                if (results.length === 0) {
+                    trackingResult.innerHTML = '<div style="padding: 2rem; color: var(--accent-red);">No matching orders found. Check your reference and try again.</div>';
+                    return;
+                }
+
+                let html = '<h3 class="checkout-section-title" style="padding: 1.5rem 1.5rem 0.5rem;">Orders Found</h3>';
+                results.forEach(order => {
+                    const status = (order.status || 'Ordered').toLowerCase();
+                    const stages = ['ordered', 'preparing your order', 'shipping', 'in transit', 'arrived', 'delivered', 'signed'];
+                    let currentIndex = stages.indexOf(status);
+
+                    // Handle "Completed" status mapping to the final stage
+                    if (status === 'completed') currentIndex = stages.length - 1;
+
+                    if (currentIndex === -1) currentIndex = 0; // Default to first stage if status unknown
+
+                    const progressPercent = (currentIndex / (stages.length - 1)) * 100;
+
+                    const statusClass = (status === 'delivered' || status === 'signed' || status === 'completed') ? 'status-completed' : (status === 'failed' ? 'status-failed' : 'status-pending');
+
+                    html += `
+                        <div class="tracking-item-row" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding: 1.5rem; text-align: left; animation: fadeIn 0.3s ease;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                                <div>
+                                    <div style="color: var(--gold); font-weight: 700; font-size: 0.8rem; margin-bottom: 4px;">ID: ${order.id}</div>
+                                    <div style="color: white; font-weight: 600;">${order.productTitle || 'Products'}</div>
+                                </div>
+                                <span class="status-badge ${statusClass}">${order.status || 'Ordered'}</span>
+                            </div>
+
+                            <div class="tracking-progress-container">
+                                <div class="progress-track">
+                                    <div class="progress-bar-fill" style="width: ${progressPercent}%"></div>
+                                    ${stages.map((stage, idx) => `
+                                        <div class="progress-step ${idx <= currentIndex ? (idx === currentIndex ? 'active' : 'completed') : ''}">
+                                            <div class="step-dot">${idx < currentIndex ? '<i class="fa-solid fa-check"></i>' : (idx + 1)}</div>
+                                            <span class="step-label">${stage.split(' ')[0]}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; color: #a0a0b8; font-size: 0.85rem; margin-top: 10px;">
+                                <span>Amount: KSh ${order.amount ? order.amount.toLocaleString() : '0'}</span>
+                                <span>${new Date(order.timestamp).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                trackingResult.innerHTML = html;
+            });
+        };
+
+
+        window.switchAuthTab = (mode) => {
+            authMode = mode;
+            const signupFields = document.getElementById('signupFields');
+            const consentField = document.getElementById('consentField');
+            const authSubmitBtn = document.getElementById('authSubmitBtn');
+            const loginTab = document.getElementById('loginTab');
+            const signupTab = document.getElementById('signupTab');
+            const forgotLink = document.getElementById('forgotPasswordLink');
+
+            if (mode === 'signup') {
+                signupFields.style.display = 'block';
+                consentField.style.display = 'flex';
+                authSubmitBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span>CREATE ACCOUNT</span>';
+                loginTab.classList.remove('active');
+                signupTab.classList.add('active');
+                forgotLink.style.display = 'none';
+            } else {
+                signupFields.style.display = 'none';
+                consentField.style.display = 'none';
+                authSubmitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>LOGIN</span>';
+                loginTab.classList.add('active');
+                signupTab.classList.remove('active');
+                forgotLink.style.display = 'block';
+            }
+        };
+
+        window.openAuthModal = () => {
+            document.getElementById('authModal').classList.add('active');
+            document.body.style.overflow = "hidden";
+        };
+
+        window.closeAuthModal = () => {
+            document.getElementById('authModal').classList.remove('active');
+            document.body.style.overflow = "auto";
+        };
+
+        window.handleAuthSubmit = async (event) => {
+            event.preventDefault();
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const name = document.getElementById('authName').value;
+            const consent = document.getElementById('authTermsConsent').checked;
+
+            if (authMode === 'signup' && !consent) {
+                alert("Please agree to the Terms and Privacy Policy before proceeding.");
+                return;
+            }
+
+            try {
+                if (authMode === 'signup') {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    await updateProfile(userCredential.user, { displayName: name });
+                    saveUserProfile(userCredential.user);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                }
+                closeAuthModal();
+            } catch (error) {
+                console.error("Auth failed:", error);
+                alert(error.message);
+            }
+        };
+
+        window.handleForgotPassword = async () => {
+            const email = document.getElementById('authEmail').value;
+            if (!email) {
+                alert("Please enter your email address first.");
+                return;
+            }
+            try {
+                await sendPasswordResetEmail(auth, email);
+                alert("Password reset email sent!");
+            } catch (error) {
+                alert(error.message);
+            }
+        };
+
+        window.firebaseGoogleLogin = async () => {
+            try {
+                await signInWithPopup(auth, provider);
+                closeAuthModal();
+            } catch (error) {
+                console.error("Google login failed:", error);
+            }
+        };
+
+        window.handleAuthAction = () => {
+            if (currentUser) {
+                viewProfile();
+            } else {
+                openAuthModal();
+            }
+        };
+
+        window.firebaseLogout = async () => {
+            if(confirm("Are you sure you want to logout?")) {
+                try {
+                    await signOut(auth);
+                    returnToMainShowroom();
+                } catch (error) {
+                    console.error("Logout failed:", error);
+                }
+            }
+        };
+
+        async function saveUserProfile(user) {
+            const userRef = ref(db, `users/${user.uid}`);
+            const snapshot = await get(userRef);
+
+            const userData = {
+                uid: user.uid,
+                displayName: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL,
+                lastLogin: Date.now()
+            };
+
+            if (!snapshot.exists()) {
+                userData.createdAt = Date.now();
+            }
+
+            await update(userRef, userData);
+        }
+
+        async function fetchUserProfile(uid) {
+            const userRef = ref(db, `users/${uid}`);
+            const snapshot = await get(userRef);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                if (data.billingInfo) {
+                    document.getElementById('billingFirstName').value = data.billingInfo.firstName || "";
+                    document.getElementById('billingLastName').value = data.billingInfo.lastName || "";
+                    document.getElementById('billingAddress').value = data.billingInfo.address || "";
+                    document.getElementById('billingTown').value = data.billingInfo.town || "";
+                    document.getElementById('billingCounty').value = data.billingInfo.county || "Uasin Gishu";
+                    document.getElementById('billingPhone').value = data.billingInfo.phone || "";
+                    document.getElementById('billingEmail').value = data.billingInfo.email || data.email || "";
+                }
+            }
+        }
+
+        window.viewProfile = (isPopStateProcessing = false) => {
+            if (!currentUser) return openAuthModal();
+
+            updateBottomNavActive(3);
+            closeProductDisplay(true);
+            showroomSection.style.display = "none";
+            checkoutSection.classList.remove('active');
+            cartSection.classList.remove('active');
+            document.getElementById('trackingSection').classList.remove('active');
+            profileSection.classList.add('active');
+            document.body.classList.add('overlay-active');
+
+            document.getElementById('profileName').innerText = currentUser.displayName || "Valued Customer";
+            document.getElementById('profileEmail').innerText = currentUser.email;
+
+            const profilePic = document.getElementById('profilePic');
+            const placeholder = document.getElementById('profilePlaceholder');
+            if (currentUser.photoURL) {
+                profilePic.src = currentUser.photoURL;
+                profilePic.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else {
+                profilePic.style.display = 'none';
+                placeholder.style.display = 'block';
+            }
+
+            // Real-time order stats (simplified for now)
+            fetchOrderStats();
+
+            // Initialize Recommendations
+            renderRecommendations();
+
+            if (!isPopStateProcessing) {
+                window.history.pushState({ view: 'profile' }, '', '#profile');
+            }
+        };
+
+        function fetchOrderStats() {
+            if (!currentUser) return;
+            const ordersRef = ref(db, 'orders');
+            const q = query(ordersRef, orderByChild('email'), equalTo(currentUser.email));
+
+            get(q).then((snapshot) => {
+                const orders = snapshot.val();
+                let stats = { pay: 0, ship: 0, received: 0, review: 0 };
+
+                if (orders) {
+                    Object.values(orders).forEach(order => {
+                        const status = (order.status || '').toLowerCase();
+                        if (status === 'ordered' || status === 'pending' || status === 'to pay') stats.pay++;
+                        else if (status === 'preparing your order' || status === 'to ship' || status === 'processing') stats.ship++;
+                        else if (['shipping', 'in transit', 'arrived', 'shipped', 'out for delivery'].includes(status)) stats.received++;
+                        else if (status === 'delivered' || status === 'signed' || status === 'completed') stats.review++;
+                    });
+                }
+
+                updateStatusBadges(stats);
+            });
+        }
+
+        function updateStatusBadges(stats) {
+            const badges = document.querySelectorAll('#profileSection .status-badge-count');
+            const counts = [stats.pay, stats.ship, stats.received, stats.review];
+
+            badges.forEach((badge, idx) => {
+                const count = counts[idx];
+                if (count > 0) {
+                    badge.innerText = count;
+                    badge.style.display = 'flex';
+                } else {
+                    badge.style.display = 'none';
+                }
+            });
+        }
+
+        function renderRecommendations() {
+            const container = document.getElementById('profileRecommendations');
+            if (!container || !allProducts || allProducts.length === 0) return;
+
+            container.innerHTML = '';
+            // Get 4 random products
+            const shuffled = [...allProducts].sort(() => 0.5 - Math.random());
+            const selected = shuffled.slice(0, 4);
+
+            selected.forEach((p, index) => {
+                container.appendChild(createProductCard(p, index));
+            });
+        }
+
+        let map, marker;
+        let pinnedLocation = null;
+
+        window.openLocationPicker = async () => {
+            if (!currentUser) return openAuthModal();
+
+            document.getElementById('mapModal').classList.add('active');
+
+            // Default center (Nairobi)
+            let lat = -1.286389;
+            let lng = 36.817223;
+            let hasSaved = false;
+
+            // Check for existing pinned location
+            try {
+                const userRef = ref(db, 'users/' + currentUser.uid + '/billingInfo');
+                const snap = await get(userRef);
+                if (snap.exists() && snap.val().deliveryLocation) {
+                    lat = snap.val().deliveryLocation.lat;
+                    lng = snap.val().deliveryLocation.lng;
+                    document.getElementById('locationNameInput').value = snap.val().deliveryLocation.name || '';
+                    hasSaved = true;
+                }
+            } catch (e) { console.error("Error fetching saved location", e); }
+
+            setTimeout(() => {
+                if (!map) {
+                    map = L.map('map', {
+                        zoomControl: false // Cleaner for mobile
+                    }).setView([lat, lng], 15);
+
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© Modish Mix'
+                    }).addTo(map);
+
+                    marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                    pinnedLocation = { lat, lng };
+
+                    marker.on('dragend', function(event) {
+                        const position = marker.getLatLng();
+                        pinnedLocation = { lat: position.lat, lng: position.lng };
+                    });
+
+                    map.on('click', function(e) {
+                        marker.setLatLng(e.latlng);
+                        pinnedLocation = { lat: e.latlng.lat, lng: e.latlng.lng };
+                    });
+
+                    // Only auto-GPS if no saved location was found
+                    if (!hasSaved) {
+                        recenterOnGPS();
+                    }
+                } else {
+                    map.setView([lat, lng], 15);
+                    marker.setLatLng([lat, lng]);
+                    pinnedLocation = { lat, lng };
+                    map.invalidateSize();
+                }
+            }, 300);
+        }
+
+        window.recenterOnGPS = () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const userPos = [position.coords.latitude, position.coords.longitude];
+                    map.setView(userPos, 17);
+                    marker.setLatLng(userPos);
+                    pinnedLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+                }, (err) => {
+                    showToast("GPS Access Denied. Please pick manually.", "error");
+                }, { enableHighAccuracy: true, timeout: 5000 });
+            } else {
+                showToast("Geolocation not supported", "error");
+            }
+        };
+
+        window.closeMapModal = () => {
+            document.getElementById('mapModal').classList.remove('active');
+        }
+
+        window.savePinnedLocation = async () => {
+            if (!currentUser || !pinnedLocation) return;
+
+            const locName = document.getElementById('locationNameInput').value.trim();
+            if (!locName) {
+                alert("Please give this location a name (e.g., Home, Near Stage, Shop Name).");
+                return;
+            }
+
+            const btn = document.getElementById('pinLocationBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SAVING...';
+            btn.disabled = true;
+
+            try {
+                const userRef = ref(db, 'users/' + currentUser.uid + '/billingInfo');
+                await update(userRef, {
+                    deliveryLocation: {
+                        ...pinnedLocation,
+                        name: locName
+                    }
+                });
+
+                showToast("Location Pinned Successfully!", "success");
+                closeMapModal();
+            } catch (error) {
+                console.error("Error pinning location:", error);
+                showToast("Failed to pin location", "error");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        window.openPolicyModal = (type) => {
+            const modal = document.getElementById('policyModal');
+            if (!modal) {
+                console.error("Policy modal element not found!");
+                return;
+            }
+            const title = document.getElementById('policyModalTitle');
+            const content = document.getElementById('policyModalContent');
+
+            if (type === 'delivery') {
+                title.innerText = "Shipping & Delivery Policy";
+                content.innerHTML = `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #0b004f; font-size: 0.9rem; margin-bottom: 5px; text-transform: uppercase;">Shipping Countries</h4>
+                        <p>Kenya</p>
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #0b004f; font-size: 0.9rem; margin-bottom: 5px; text-transform: uppercase;">Handling Time</h4>
+                        <p>1 - 2 Working Days (Fulfilled: Mon - Sat)</p>
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #0b004f; font-size: 0.9rem; margin-bottom: 5px; text-transform: uppercase;">Delivery Time</h4>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li>• <strong>Main Cities:</strong> 1 - 2 Working Days</li>
+                            <li>• <strong>Regional Areas:</strong> 2 - 5 Working Days</li>
+                            <li>• <strong>All Other Areas:</strong> 3 - 7 Working Days</li>
+                        </ul>
+                        <p style="font-size: 0.8rem; color: #666; margin-top: 5px;">*Fulfilled: Mon - Sat</p>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px dashed var(--gold);">
+                        <h4 style="color: #0b004f; font-size: 0.9rem; margin-bottom: 10px; text-transform: uppercase;">Standard Shipping Cost</h4>
+                        <p style="margin-bottom: 8px;"><strong>FREE shipping</strong> for all orders above <strong>KES 5,000</strong>.</p>
+                        <p style="margin-bottom: 8px;">Orders below KES 5,000: Additional shipping fee of <strong>KES 300</strong>.</p>
+                        <p style="color: var(--gold); font-weight: 700;">Local Discount (Uasin Gishu): FREE for orders above KES 2,500, else KES 150.</p>
+                    </div>
+                `;
+            } else if (type === 'buying') {
+                title.innerText = "How To Shop With Us";
+                content.innerHTML = `
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        <div style="background: var(--gold); color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">1</div>
+                        <div>
+                            <h4 style="color: #0b004f; font-size: 0.95rem; margin-bottom: 5px;">Browse & Select</h4>
+                            <p style="font-size: 0.9rem;">Explore our collection and click <strong>"Buy Now"</strong> on the items you love to add them to your cart.</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        <div style="background: var(--gold); color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">2</div>
+                        <div>
+                            <h4 style="color: #0b004f; font-size: 0.95rem; margin-bottom: 5px;">Checkout & Payment</h4>
+                            <p style="font-size: 0.9rem;">Go to your cart, provide your delivery details, and proceed to payment via M-PESA. We use a secure <strong>Buy Goods Till Number</strong> for all transactions.</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        <div style="background: var(--gold); color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">3</div>
+                        <div>
+                            <h4 style="color: #0b004f; font-size: 0.95rem; margin-bottom: 5px;">Order Confirmation</h4>
+                            <p style="font-size: 0.9rem;">Once payment is received, our team will process your order and contact you with tracking details within 24 hours.</p>
+                        </div>
+                    </div>
+                    <div style="background: #eef2ff; padding: 15px; border-radius: 8px; border-left: 4px solid var(--deep-blue);">
+                        <p style="font-size: 0.85rem; color: #0b004f; font-weight: 500;">
+                            <i class="fa-solid fa-circle-info"></i> Need help? You can chat with us instantly via the <strong>WhatsApp</strong> button at the bottom of your screen.
+                        </p>
+                    </div>
+                `;
+            } else if (type === 'return') {
+                title.innerText = "Return & Refund Policy";
+                content.innerHTML = `
+                    <div style="background: #fdf2f2; padding: 15px; border-radius: 8px; border: 1px solid #fee2e2; margin-bottom: 1.5rem;">
+                        <h4 style="color: #991b1b; font-size: 0.95rem; margin-bottom: 8px; text-transform: uppercase;"><i class="fa-solid fa-headset"></i> Contact Us</h4>
+                        <p style="font-size: 0.9rem; margin-bottom: 5px;"><strong>KE Service Phone:</strong> 0707891551 / 0722 635 443</p>
+                        <p style="font-size: 0.9rem;"><strong>Email:</strong> storemodishmix@gmail.com</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">About Carlcare</h4>
+                        <p style="font-size: 0.85rem; line-height: 1.6; color: #444;">
+                            As the official after-sales service brand of <strong>oraimo</strong>, Carlcare provides nationwide offline service centers for worry-free support. If you encounter any quality issues with your oraimo product during the warranty period, contact the nearest Carlcare service center (<a href="https://www.carlcare.com/global/service-center" target="_blank" style="color: var(--deep-blue);">https://www.carlcare.com/global/service-center</a>) for professional repair or replacement services.
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">Warranty Claims for Quality-Related Issues</h4>
+                        <p style="font-size: 0.85rem; margin-bottom: 10px;">All quality-related defects on items sold directly Modish Mix Store are covered by an extensive warranty, starting from the date of purchase (For electronics and Mobile Accessories ONLY).</p>
+
+                        <h5 style="font-size: 0.9rem; margin: 10px 0 5px;">Process:</h5>
+                        <ul style="font-size: 0.85rem; padding-left: 20px; color: #444; line-height: 1.5;">
+                            <li>Buyer must provide sufficient proof of purchase.</li>
+                            <li>Modish Mix Store must document what happens when buyers troubleshoot the product.</li>
+                            <li>The defective item’s serial number and/or visible proof depicting the defect are required.</li>
+                            <li>It may be necessary to return an item for quality inspection.</li>
+                            <li>For defective items that Modish Mix Store needs to have returned, warranties on those replacements are voided if the wrong item is returned to oraimo or if the defective item is not returned.</li>
+                        </ul>
+
+                        <h5 style="font-size: 0.9rem; margin: 10px 0 5px;">Valid proof of purchase:</h5>
+                        <p style="font-size: 0.85rem; color: #444;">Order number from online purchases made through Modish Mix Store.</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: #991b1b; font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #fee2e2; padding-bottom: 5px;">EXCLUSIONS (This warranty does not cover)</h4>
+                        <ol style="font-size: 0.8rem; padding-left: 20px; color: #444; line-height: 1.4;">
+                            <li>Products with original serial numbers removed, altered or not able to be readily determined.</li>
+                            <li>Damage caused by transportation and handling, including scratches, dents, chips, and/or any damages to the exterior of your product.</li>
+                            <li>Damage or failure caused by incorrect electrical current or voltage, fluctuations or surges.</li>
+                            <li>Applications and use which this product was not intended to.</li>
+                            <li>Damage or failure caused by products or equipment not supplied by oraimo.</li>
+                            <li>Accident, misuse, abuse, neglect, misapplication, fire, water, lightning or other acts of nature.</li>
+                            <li>Products used in a commercial setting.</li>
+                            <li>Expenses for making the appliance accessible for servicing, such as removal of trim, cupboards, shelves, etc.</li>
+                            <li>Service calls to repair or replace appliance light bulbs, air filters, water filters, other consumables, or knobs, handles, or other cosmetic parts.</li>
+                            <li>Surcharges including, but not limited to, any after hour, weekend, or holiday service calls, tolls, ferry trip charges, or mileage expense for service calls to remote areas.</li>
+                            <li>Damage or failure caused by improper or faulty installation, product alteration or modification.</li>
+                            <li>Damage or failure caused by: Non-oraimo or unauthorized parts, supplies, accessories or equipment; services performed by unauthorized service companies.</li>
+                        </ol>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">NOTIFICATIONS</h4>
+                        <ol style="font-size: 0.8rem; padding-left: 20px; color: #444; line-height: 1.4;">
+                            <li>All quality-related defects on items sold directly by Modish Mix Store are covered by an extensive warranty, starting from the date of purchase.</li>
+                            <li>oraimo's limited warranty is restricted to the country of purchase. The limited warranty is void on items taken outside the country they were originally bought in or shipped to directly from an authorized online purchase.</li>
+                            <li>This warranty covers ONLY original oraimo products. It is not applicable to normal wear and tear, or any defects arising from damage caused by misuse of this product.</li>
+                            <li>Warranty is for the primary product only nor transferable. Any free additional product(s) are not covered in this warranty.</li>
+                            <li>If the product fails regardless of usage in compliance with the instruction manual and other written precaution, replacement will be provided free of charge.</li>
+                        </ol>
+                    </div>
+                `;
+            } else if (type === 'about') {
+                title.innerText = "About Modish Mix Store";
+                content.innerHTML = `
+                    <p style="margin-bottom: 1rem;">Welcome to <strong>Modish Mix Store</strong>, your premier destination for high-quality electronics, mobile accessories, and lifestyle products in Kenya.</p>
+                    <p style="margin-bottom: 1rem;">Founded on the principles of excellence and reliability, we strive to bring the latest technology and fashion to your doorstep. We are official partners with leading brands like oraimo, ensuring that every product you buy is 100% genuine.</p>
+                    <p style="margin-bottom: 1rem;">Our mission is to provide a seamless shopping experience with fast delivery and exceptional customer support.</p>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid var(--gold);">
+                        <p style="font-weight: 700; color: var(--deep-blue);">Location:</p>
+                        <p>Eldoret Town, Kenya</p>
+                        <p style="font-weight: 700; color: var(--deep-blue); margin-top: 10px;">Contact:</p>
+                        <p>0707891551 / 0722635443</p>
+                    </div>
+                `;
+            } else if (type === 'terms') {
+                title.innerText = "Shipping & Delivery Policy";
+                content.innerHTML = `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">Shipping Countries:</h4>
+                        <p style="font-size: 0.9rem; margin-bottom: 5px;">Kenya</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">Handling Time:</h4>
+                        <p style="font-size: 0.9rem; margin-bottom: 5px;">1-2 Working Days.</p>
+                        <p style="font-size: 0.9rem;">Fulfilled: Mon.-Sat.</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">Delivery time:</h4>
+                        <ul style="font-size: 0.85rem; padding-left: 20px; color: #444; line-height: 1.6;">
+                            <li><strong>Main Cities:</strong> 1 - 2 Working Days;</li>
+                            <li><strong>Regional Areas:</strong> 2 - 5 Working Days;</li>
+                            <li><strong>All Other Areas:</strong> 3 - 7 Working Days.</li>
+                        </ul>
+                        <p style="font-size: 0.9rem; margin-top: 5px;">Fulfilled: Mon.-Sat.</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">Standard Shipping Cost:</h4>
+                        <p style="font-size: 0.9rem; margin-bottom: 10px;"><strong>FREE shipping</strong> for all orders above KES 5,000.</p>
+                        <p style="font-size: 0.9rem; margin-bottom: 10px;">If the order price is less than KES 5,000, there will be an additional shipping fee: <strong>KES 300</strong>.</p>
+                        <p style="font-size: 0.9rem; color: var(--gold); font-weight: bold;">Uasin Gishu Local Rate: FREE above KES 2,500, else KES 150.</p>
+                    </div>
+                `;
+            } else if (type === 'returns') {
+                title.innerText = "Return & Refund Policy";
+                content.innerHTML = `
+                    <div style="background: #fdf2f2; padding: 15px; border-radius: 8px; border: 1px solid #fee2e2; margin-bottom: 1.5rem;">
+                        <h4 style="color: #991b1b; font-size: 0.95rem; margin-bottom: 8px; text-transform: uppercase;"><i class="fa-solid fa-headset"></i> Contact Us</h4>
+                        <p style="font-size: 0.9rem; margin-bottom: 5px;"><strong>KE Service Phone:</strong> 0707891551 / 0722 635 443</p>
+                        <p style="font-size: 0.9rem;"><strong>Email:</strong> storemodishmix@gmail.com</p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--deep-blue); font-size: 0.95rem; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;">About Carlcare</h4>
+                        <p style="font-size: 0.85rem; line-height: 1.6; color: #444;">
+                            As the official after-sales service brand of <strong>oraimo</strong>, Carlcare provides nationwide offline service centers for worry-free support. If you encounter any quality issues with your oraimo product during the warranty period, contact the nearest Carlcare service center (<a href="https://www.carlcare.com/global/service-center" target="_blank" style="color: var(--deep-blue);">https://www.carlcare.com/global/service-center</a>) for professional repair or replacement services.
+                        </p>
+                    </div>
+                `;
+            } else if (type === 'privacy') {
+                title.innerText = "Privacy Policy";
+                content.innerHTML = `
+                    <p style="font-size: 0.85rem; margin-bottom: 1rem;">Your privacy is important to us. It is Modish Mix Store's policy to respect your privacy regarding any information we may collect from you across our website.</p>
+                    <p style="font-size: 0.8rem;">We only ask for personal information (Name, Phone, Address, Email) when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent.</p>
+                    <p style="font-size: 0.8rem; margin-top: 10px;">We do not share any personally identifying information publicly or with third-parties, except when required to by law or to fulfill your order (e.g. sharing your address with delivery partners).</p>
+                `;
+            }
+            modal.classList.add('active');
+            document.body.style.overflow = "hidden";
+            pushTemporaryState();
+        };
+
+        window.closePolicyModal = (isPopStateProcessing = false) => {
+            document.getElementById('policyModal').classList.remove('active');
+            document.body.style.overflow = "auto";
+            if (!isPopStateProcessing && history.state && history.state.activeView === "modalOrCheckout") {
+                history.back();
+            }
+        };
+
+        window.openFindMeModal = () => {
+            document.getElementById('findMeModal').classList.add('active');
+            document.body.style.overflow = "hidden";
+            pushTemporaryState();
+        };
+
+        window.closeFindMeModal = (isPopStateProcessing = false) => {
+            document.getElementById('findMeModal').classList.remove('active');
+            document.body.style.overflow = "auto";
+            if (!isPopStateProcessing && history.state && history.state.activeView === "modalOrCheckout") {
+                history.back();
+            }
+        };
+
+        window.handleFindMeSubmit = () => {
+            const desc = document.getElementById('findMeDesc').value;
+            const imageInput = document.getElementById('findMeImage');
+
+            if (!desc) {
+                alert("Please provide a description of the product.");
+                return;
+            }
+
+            let message = `Hello Modish Mix Store, I'm looking for a product I couldn't find in your store:
+
+📝 *Description:* ${desc}`;
+
+            if (imageInput.files && imageInput.files.length > 0) {
+                message += `\n\n🖼️ *Note:* I have an image of the product to show you.`;
+            }
+
+            message += `\n\n🤝 *My Request:* I'm looking for this at a reasonable price. Looking forward to your help!`;
+
+            window.open(`https://wa.me/254722635443?text=${encodeURIComponent(message)}`, '_blank');
+            closeFindMeModal();
+        };
+
+        async function fetchUserOrders() {
+            const ordersList = document.getElementById('userOrdersList');
+            const userEmail = currentUser.email.toLowerCase();
+
+            // Fetch all orders and filter client-side to handle case-sensitivity and potential missing indexes
+            onValue(ref(db, "orders"), (snapshot) => {
+                const data = snapshot.val();
+                if (!data) {
+                    ordersList.innerHTML = "No orders found in the system.";
+                    return;
+                }
+
+                const filteredOrders = Object.keys(data)
+                    .map(key => ({ id: key, ...data[key] }))
+                    .filter(order => order.email && order.email.toLowerCase() === userEmail);
+
+                if (filteredOrders.length === 0) {
+                    ordersList.innerHTML = `
+                        <div style="padding: 10px; color: #a0a0b8;">
+                            No orders found for <b>${userEmail}</b>.
+                            <p style="font-size: 0.75rem; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+                                If you used a different email or phone at checkout, try the
+                                <a href="javascript:void(0)" onclick="openTrackingPage()" style="color: var(--gold); text-decoration: underline;">Tracking Tool</a>.
+                            </p>
+                        </div>`;
+                    return;
+                }
+
+                ordersList.innerHTML = '';
+                const sortedOrders = filteredOrders.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+                sortedOrders.forEach(order => {
+                    const date = new Date(order.timestamp).toLocaleDateString();
+                    const div = document.createElement('div');
+                    div.style.background = 'rgba(255,255,255,0.05)';
+                    div.style.padding = '10px';
+                    div.style.borderRadius = '8px';
+                    div.style.marginBottom = '10px';
+                    div.style.textAlign = 'left';
+                    div.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="color:var(--gold); font-weight:bold;">${date}</span>
+                            <span class="status-badge ${order.status === 'Completed' ? 'status-completed' : 'status-pending'}">${order.status}</span>
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--gold); margin-bottom:4px; font-family:monospace;">ID: ${order.id || 'N/A'}</div>
+                        <div style="font-size:0.85rem; color:white;">${order.productTitle}</div>
+                        <div style="font-size:0.8rem; color:#a0a0b8;">Total: KSh ${order.amount.toLocaleString()}</div>
+                    `;
+                    ordersList.appendChild(div);
+                });
+            });
+        }
+
+        // Show initial skeletons
+        renderSkeletons();
+
+        // --- SYNC DATA (Optimized for Free Tier) ---
+
+        // Start fetching products
+        const productsRef = ref(db, "products");
+        // Use get() for initial load to save concurrent connections
+        get(productsRef).then((snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                allProducts = [];
+                renderProducts([]);
+            } else {
+                allProducts = Object.keys(data).map(key => ({
+                    id: key,
+                    ...data[key]
+                })).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+                cacheData('products', allProducts);
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const productId = urlParams.get('product');
+                if (productId && initialLoad) {
+                    const targetProduct = allProducts.find(p => p.id === productId);
+                    if (targetProduct) openProductDisplay(targetProduct);
+                }
+
+                requestAnimationFrame(() => {
+                    filterAndRender();
+                });
+
+                setTimeout(() => {
+                    setupHotSellDisplay();
+                }, 50);
+            }
+
+            if (initialLoad) {
+                setTimeout(() => {
+                    const splash = document.getElementById('appSplashScreen');
+                    if (splash) {
+                        splash.style.opacity = '0';
+                        splash.style.transition = 'opacity 0.4s ease';
+                        setTimeout(() => splash.style.display = 'none', 400);
+                    }
+                    initialLoad = false;
+                }, 400);
+            }
+        });
+
+        // --- STORE INFO (Fetch Once) ---
+        get(ref(db, "storeInfo")).then((snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                cacheData('storeInfo', data);
+                if (data.announcement) document.getElementById('topAnnouncement').innerHTML = data.announcement;
+                if (data.deliveryPolicy) document.getElementById('displayDelivery').innerText = data.deliveryPolicy;
+                if (data.buyingProcedure) document.getElementById('displayBuying').innerText = data.buyingProcedure;
+                if (data.mpesaShortcode) {
+                    const tillDisplay = document.getElementById('tillNumber');
+                    if (tillDisplay) tillDisplay.innerText = data.mpesaShortcode;
+                    window.currentTillNumber = data.mpesaShortcode;
+                }
+            }
+        });
+
+        // --- CATEGORIES (Fetch Once) ---
+        get(ref(db, "categories")).then((catSnapshot) => {
+            const catData = catSnapshot.val();
+            if (catData) {
+                cacheData('categories', catData);
+                get(ref(db, "subcategories")).then((subSnapshot) => {
+                    const subData = subSnapshot.val();
+                    cacheData('subcategories', subData);
+                    renderDrawerMenu(catData, subData);
+                });
+            }
+        });
+
+        window.addToCart = () => {
+            const qty = parseInt(document.getElementById('qtyInput').value);
+            const existingItem = cart.find(item => item.title === currentItem.title);
+
+            if (existingItem) {
+                existingItem.qty += qty;
+            } else {
+                cart.push({ ...currentItem, qty });
+            }
+
+            updateCartBadges();
+            closeProductDisplay();
+
+            // Show success feedback
+            showToast("Added to cart successfully!");
+        };
+
+        window.showToast = (message) => {
+            const toast = document.getElementById('toastNotification');
+            const toastMsg = document.getElementById('toastMessage');
+            if (toast && toastMsg) {
+                toastMsg.innerText = message;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            }
+        };
+
+        window.viewCart = (isPopStateProcessing = false) => {
+            updateBottomNavActive(2);
+            closeProductDisplay(true);
+            showroomSection.style.display = "none";
+            checkoutSection.classList.remove('active');
+            profileSection.classList.remove('active');
+            cartSection.classList.add('active');
+            document.body.classList.add('overlay-active');
+            window.scrollTo(0, 0);
+            renderCartItems();
+            if (!isPopStateProcessing) pushTemporaryState();
+        };
+
+        function renderCartItems() {
+            const list = document.getElementById('cartItemsList');
+            const summary = document.getElementById('cartSummaryCard');
+            const empty = document.getElementById('emptyCartMsg');
+
+            list.innerHTML = '';
+            let total = 0;
+
+            if (cart.length === 0) {
+                summary.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+
+            summary.style.display = 'block';
+            empty.style.display = 'none';
+
+            cart.forEach((item, index) => {
+                const subtotal = item.price * item.qty;
+                total += subtotal;
+
+                const hasDiscount = item.originalPrice && item.originalPrice > item.price;
+
+                const div = document.createElement('div');
+                div.className = 'cart-item-card';
+
+                div.innerHTML = `
+                    <div class="cart-item-main">
+                        <img class="cart-item-img" src="${item.imageUrl || 'logo.jpg'}" alt="${item.title}">
+                        <div class="cart-item-details">
+                            <span class="cart-item-title">${item.title}</span>
+                            <span class="cart-item-brand">${item.category || 'Store'}</span>
+                        </div>
+                        <div class="cart-item-price-info">
+                            <div class="cart-item-current-price">KSh ${item.price.toLocaleString()}</div>
+                            ${hasDiscount ? `<div class="cart-item-old-price">KSh ${item.originalPrice.toLocaleString()}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="cart-item-actions">
+                        <button class="cart-remove-btn" onclick="removeFromCart(${index})">
+                            <i class="fa-solid fa-trash-can"></i> REMOVE
+                        </button>
+                        <div class="cart-qty-selector">
+                            <button class="cart-qty-btn" onclick="updateCartItemQty(${index}, -1)"><i class="fa-solid fa-minus"></i></button>
+                            <input class="cart-qty-input" type="text" value="${item.qty}" readonly>
+                            <button class="cart-qty-btn" onclick="updateCartItemQty(${index}, 1)"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+
+            const county = document.getElementById('billingCounty').value || "Uasin Gishu";
+            const deliveryFee = calculateDeliveryFee(total, county);
+            const finalTotal = total + deliveryFee;
+
+            document.getElementById('cartTotalDisplay').innerHTML = `
+                <div style="font-size: 0.9rem; color: #888; font-weight: normal; margin-bottom: 5px;">
+                    Subtotal: KSh ${total.toLocaleString()}<br>
+                    Delivery (${county}): ${deliveryFee > 0 ? 'KSh ' + deliveryFee.toLocaleString() : '<span style="color:#27ae60">FREE</span>'}
+                </div>
+                KSh ${finalTotal.toLocaleString()}
+            `;
+        }
+
+        window.updateCartItemQty = (index, delta) => {
+            cart[index].qty += delta;
+            if (cart[index].qty < 1) cart[index].qty = 1;
+            updateCartBadges();
+            renderCartItems();
+        };
+
+        window.removeFromCart = (index) => {
+            if(confirm("Remove this item from cart?")) {
+                const removedItem = cart[index].title;
+                cart.splice(index, 1);
+                updateCartBadges();
+                renderCartItems();
+                showToast(`${removedItem} removed from cart`);
+            }
+        };
+
+        window.proceedFromCartToCheckout = () => {
+            cartSection.classList.remove('active');
+            checkoutSection.classList.add('active');
+            document.body.classList.add('overlay-active');
+            window.scrollTo(0, 0);
+
+            updateCheckoutSummary();
+            pushTemporaryState();
+        };
+
+        function updateCheckoutSummary() {
+            const summaryTableBody = document.querySelector('.order-summary-table tbody');
+            summaryTableBody.innerHTML = '';
+
+            let total = 0;
+            cart.forEach(item => {
+                const subtotal = item.price * item.qty;
+                total += subtotal;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${item.title} × ${item.qty}</td><td style="text-align: right; font-weight: 600;">KSh ${subtotal.toLocaleString()}</td>`;
+                summaryTableBody.appendChild(tr);
+            });
+
+            const county = document.getElementById('billingCounty').value;
+            const deliveryFee = calculateDeliveryFee(total, county);
+            const finalTotal = total + deliveryFee;
+
+            if (deliveryFee > 0) {
+                const deliveryRow = document.createElement('tr');
+                deliveryRow.innerHTML = `<td>Delivery Fee (${county})</td><td style="text-align: right; font-weight: 600;">KSh ${deliveryFee.toLocaleString()}</td>`;
+                summaryTableBody.appendChild(deliveryRow);
+            } else {
+                const deliveryRow = document.createElement('tr');
+                deliveryRow.innerHTML = `<td>Delivery Fee (${county})</td><td style="text-align: right; font-weight: 600; color: #27ae60;">FREE</td>`;
+                summaryTableBody.appendChild(deliveryRow);
+            }
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'summary-total-row';
+            totalRow.innerHTML = `<td>Total</td><td style="text-align: right;">KSh ${finalTotal.toLocaleString()}</td>`;
+            summaryTableBody.appendChild(totalRow);
+
+            totalAmount = finalTotal;
+            document.getElementById('checkoutAlertBar').innerText = deliveryFee > 0 ?
+                `✓ Delivery fee of KSh ${deliveryFee} applied for ${county}.` :
+                `✓ You've unlocked FREE delivery for ${county}!`;
+        }
+
+        // Increment Site Traffic (Deferred)
+        setTimeout(() => {
+            update(ref(db, "analytics"), { traffic: increment(1) });
+        }, 2000);
+
+        // Initialize Cart Badges
+        updateCartBadges();
+
+        // IntersectionObserver for inline Find Me bars reveal animation
+        window.inlineBarObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('reveal');
+                    window.inlineBarObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        // --- Find Me Product Text Rotation & Scroll Visibility ---
+        const findMePhrases = [
+            "Can't find what you want? 🕵️",
+            "Don't worry, we find it for you! ✨",
+            "Click here for custom requests 🤝",
+            "Modish Mix Sourcing Service 😊"
+        ];
+        let findMeIndex = 0;
+        let findMeTimeout;
+        let lastScrollY = window.scrollY;
+        const findMeBar = document.getElementById('findMeBar');
+
+        window.addEventListener('scroll', () => {
+            if (!findMeBar) return;
+
+            const currentScrollY = window.scrollY;
+
+            // Only trigger if we scrolled more than 100px from top
+            if (currentScrollY > 100) {
+                // Remove visible class while scrolling to keep it hidden
+                findMeBar.classList.remove('visible');
+
+                // Clear existing timeout
+                clearTimeout(findMeTimeout);
+
+                // Show the bar ONLY when scrolling stops
+                findMeTimeout = setTimeout(() => {
+                    findMeBar.classList.add('visible');
+
+                    // Auto-hide after another 4 seconds of being stationary
+                    setTimeout(() => {
+                        findMeBar.classList.remove('visible');
+                    }, 4000);
+                }, 300); // Wait 300ms after scroll stop to show
+            } else {
+                findMeBar.classList.remove('visible');
+            }
+
+            lastScrollY = currentScrollY;
+        }, { passive: true });
+
+        setInterval(() => {
+            const texts = document.querySelectorAll('#findMeBarText, .rotating-text-inline');
+            findMeIndex = (findMeIndex + 1) % findMePhrases.length;
+
+            texts.forEach(el => {
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    el.innerText = findMePhrases[findMeIndex];
+                    el.style.opacity = '1';
+                }, 400);
+            });
+        }, 3000);
+
+        function updateCartBadges() {
+            const count = cart.reduce((sum, item) => sum + item.qty, 0);
+            const badge = document.getElementById('cartBadge');
+            const badgeBottom = document.getElementById('cartBadgeBottom');
+
+            if (count > 0) {
+                if (badge) { badge.innerText = count; badge.style.display = 'flex'; }
+                if (badgeBottom) { badgeBottom.innerText = count; badgeBottom.style.display = 'block'; }
+            } else {
+                if (badge) badge.style.display = 'none';
+                if (badgeBottom) badgeBottom.style.display = 'none';
+            }
+
+            try {
+                // Store only necessary data to avoid QuotaExceededError
+                const minimalCart = cart.map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    price: item.price,
+                    qty: item.qty,
+                    imageUrl: item.imageUrl,
+                    category: item.category,
+                    originalPrice: item.originalPrice
+                }));
+                localStorage.setItem('mms_cart', JSON.stringify(minimalCart));
+            } catch (e) {
+                console.warn("Local storage full, clearing cache...", e);
+                // Clear products cache to make room
+                for (let key in localStorage) {
+                    if (key.startsWith('mms_cache_')) localStorage.removeItem(key);
+                }
+                // Try again after clearing
+                try {
+                    const minimalCart = cart.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        price: item.price,
+                        qty: item.qty,
+                        imageUrl: item.imageUrl,
+                        category: item.category,
+                        originalPrice: item.originalPrice
+                    }));
+                    localStorage.setItem('mms_cart', JSON.stringify(minimalCart));
+                } catch (e2) { console.error("Critical: Cart storage failed", e2); }
+            }
+        }
+
+        function setupHotSellDisplay() {
+            const hotProducts = allProducts.filter(p => p.sale || (p.originalPrice && p.price < p.originalPrice)).slice(0, 10);
+            const slider = document.getElementById('hotSellSlider');
+            const banner = document.getElementById('hotSellBanner');
+
+            if (hotProducts.length === 0) {
+                banner.style.display = 'none';
+                return;
+            }
+
+            banner.style.display = 'flex';
+            slider.innerHTML = '';
+
+            hotProducts.forEach((p, index) => {
+                const isFlash = p.originalPrice && p.price < p.originalPrice;
+                const div = document.createElement('div');
+                div.className = `hot-sell-item ${index === 0 ? 'active' : ''} ${isFlash ? 'flash-sell' : ''}`;
+                div.onclick = () => openProductDisplay(p);
+
+                let priceHtml = '';
+                if (isFlash) {
+                    priceHtml = `
+                        <span class="flash-tag">FLASH SALE</span>
+                        ${p.title}
+                        <div class="price-switcher">
+                            <div class="price-switcher-inner">
+                                <span class="old-price">WAS: KSh ${p.originalPrice.toLocaleString()}</span>
+                                <span class="new-price">NOW: KSh ${p.price.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    priceHtml = `
+                        ${p.title}
+                        <div class="price-switcher">
+                            <div class="price-switcher-inner">
+                                <span>BEST PRICE</span>
+                                <span class="new-price">KSh ${p.price.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                div.innerHTML = `
+                    <img loading="lazy" decoding="async" src="${p.imageUrl || 'logo.jpg'}" alt="${p.title}">
+                    <div class="item-text">${priceHtml}</div>
+                `;
+                slider.appendChild(div);
+            });
+
+            if (hotSellInterval) clearInterval(hotSellInterval);
+
+            if (hotProducts.length > 1) {
+                hotSellInterval = setInterval(() => {
+                    const items = slider.querySelectorAll('.hot-sell-item');
+                    if (items.length === 0) return;
+
+                    const prevIndex = currentHotSellIndex;
+                    currentHotSellIndex = (currentHotSellIndex + 1) % items.length;
+
+                    items[prevIndex].classList.add('exit');
+                    items[prevIndex].classList.remove('active');
+
+                    items[currentHotSellIndex].classList.add('active');
+                    items[currentHotSellIndex].classList.remove('exit');
+
+                    // Cleanup exit class after transition
+                    setTimeout(() => {
+                        items[prevIndex].classList.remove('exit');
+                    }, 600);
+                }, 5000);
+            }
+        }
+
+        function generateStars(rating) {
+            let stars = '';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= rating) {
+                    stars += '<i class="fa-solid fa-star"></i>';
+                } else if (i - 0.5 <= rating) {
+                    stars += '<i class="fa-solid fa-star-half-stroke"></i>';
+                } else {
+                    stars += '<i class="fa-regular fa-star"></i>';
+                }
+            }
+            return stars;
+        }
+
+        function renderSkeletons() {
+            pGrid.innerHTML = '';
+            for (let i = 0; i < 8; i++) {
+                const skeleton = document.createElement('div');
+                skeleton.className = 'skeleton-card';
+                skeleton.innerHTML = `
+                    <div class="skeleton-img"><div class="skeleton-shimmer"></div></div>
+                    <div class="skeleton-text skeleton-title"><div class="skeleton-shimmer"></div></div>
+                    <div class="skeleton-text skeleton-price"><div class="skeleton-shimmer"></div></div>
+                `;
+                pGrid.appendChild(skeleton);
+            }
+        }
+
+        // --- LAZY LOADING OBSERVER ---
+        const productObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const card = entry.target;
+                    const imgBox = card.querySelector('.image-placeholder-box');
+                    const imgUrl = card.dataset.imgUrl;
+
+                    if (imgUrl && !card.classList.contains('img-loaded')) {
+                        const img = new Image();
+                        img.src = imgUrl;
+                        img.className = 'loaded-img';
+                        img.onload = () => {
+                            if (imgBox) {
+                                imgBox.appendChild(img);
+                                img.classList.add('ready');
+                                imgBox.classList.remove('img-is-loading');
+                                const shimmer = imgBox.querySelector('.skeleton-shimmer');
+                                if (shimmer) shimmer.remove();
+                            }
+                            card.classList.add('img-loaded');
+                        };
+                    }
+                    productObserver.unobserve(card);
+                }
+            });
+        }, { rootMargin: '100px' });
+
+        let wishlist = JSON.parse(localStorage.getItem('modish_wishlist')) || [];
+
+        function toggleWishlist(e, productId) {
+            e.stopPropagation();
+            const btn = e.currentTarget;
+            const icon = btn.querySelector('i');
+            const product = allProducts.find(p => p.id === productId);
+
+            if (!product) return;
+
+            const index = wishlist.findIndex(item => item.id === productId);
+
+            if (index === -1) {
+                wishlist.push(product);
+                icon.className = 'fa-solid fa-heart';
+                showToast(`Added ${product.title} to wishlist! ❤️`);
+            } else {
+                wishlist.splice(index, 1);
+                icon.className = 'fa-regular fa-heart';
+                showToast(`Removed from wishlist`);
+            }
+
+            localStorage.setItem('modish_wishlist', JSON.stringify(wishlist));
+            updateWishlistDisplay();
+        }
+
+        function updateWishlistDisplay() {
+            const container = document.getElementById('wishlistContainer');
+            const section = document.getElementById('wishlistSection');
+
+            if (!container || !section) return;
+
+            if (wishlist.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            container.innerHTML = '';
+
+            wishlist.forEach((p, index) => {
+                const card = createProductCard(p, index);
+                container.appendChild(card);
+            });
+        }
+
+        function createProductCard(p, index) {
+            const hasDiscount = p.originalPrice && p.originalPrice > p.price;
+            const isInWishlist = wishlist.some(item => item.id === p.id);
+
+            const card = document.createElement('div');
+            card.className = 'product-card';
+            card.dataset.id = p.id;
+            card.dataset.imgUrl = p.imageUrl || '';
+            card.style.animationDelay = `${(index % 8) * 0.05}s`;
+            card.onclick = (e) => {
+                openProductDisplay(p);
+            };
+
+            card.innerHTML = `
+                ${p.sale ? `<div class="sale-badge">${p.sale}</div>` : ''}
+                ${p.outOfStock === true ? `
+                    <div class="out-of-stock-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 12px; pointer-events: none;">
+                        <div class="out-of-stock-badge">
+                            <i class="fa-solid fa-bell" style="font-size: 0.7rem;"></i>
+                            <div class="text-switcher">
+                                <span>OUT OF STOCK</span>
+                                <span>CLICK HERE TO BOOK</span>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+                <div class="wishlist-icon" onclick="toggleWishlist(event, '${p.id}')">
+                    <i class="${isInWishlist ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                </div>
+                <div class="share-btn-top" onclick="shareProduct(event, '${p.id}', '${p.title.replace(/'/g, "\\'")}')">
+                    <i class="fa-solid fa-share-nodes"></i>
+                </div>
+                <div class="image-placeholder-box ${p.imageUrl ? 'img-is-loading' : ''}" id="imgBox-${p.id}">
+                    ${p.imageUrl ? '<div class="skeleton-shimmer"></div>' : ''}
+                </div>
+                <div class="product-info-panel">
+                    <h3 class="product-title">${p.title}</h3>
+                    <div class="price-row">
+                        <div class="price-group">
+                            <span class="current-price">KSh ${p.price.toLocaleString()}</span>
+                            ${hasDiscount ? `<span class="old-price">KSh ${p.originalPrice.toLocaleString()}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="product-insights">
+                        <div class="rating-stars">${generateStars(p.rating || 5)}</div>
+                        <span class="sold-count">(${p.soldCount || 0})</span>
+                    </div>
+                </div>
+            `;
+
+            productObserver.observe(card);
+
+            return card;
+        }
+
+        function renderProducts(products) {
+            pGrid.innerHTML = '';
+
+            if (products.length === 0) {
+                pGrid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.5);">No products match your search.</p>';
+                return;
+            }
+
+            // If a specific category is selected (not "All"), show standard grid
+            if (currentCategory !== 'All') {
+                pGrid.className = 'product-grid';
+                products.forEach((p, index) => {
+                    pGrid.appendChild(createProductCard(p, index));
+                });
+
+                // Add a "Find Me" bar at the end of the category grid
+                const endBar = document.createElement('div');
+                endBar.className = 'find-me-inline-bar';
+                endBar.style.gridColumn = '1 / -1';
+                endBar.onclick = openFindMeModal;
+                endBar.innerHTML = `
+                    <div class="find-me-bar-content">
+                        <i class="fa-solid fa-magnifying-glass-plus"></i>
+                        <span class="rotating-text-inline">Still can't find it? We'll source it for you! 🤝</span>
+                    </div>
+                `;
+                pGrid.appendChild(endBar);
+                return;
+            }
+
+            // Group by category for "All" view
+            pGrid.className = ''; // Remove grid for multi-section view
+            // Only use categories that actually have products in the filtered list
+            const categoriesInFiltered = [...new Set(products.map(p => p.category))].filter(Boolean);
+
+            categoriesInFiltered.forEach((cat, index) => {
+                const catProducts = products.filter(p => p.category === cat);
+                if (catProducts.length === 0) return;
+
+                const section = document.createElement('div');
+                section.className = 'category-section';
+                section.innerHTML = `
+                    <div class="category-header-bar">
+                        <h2>${cat}</h2>
+                        <a href="javascript:void(0)" class="see-all-link" onclick="filterByCategory('${cat}')">SEE ALL <i class="fa-solid fa-chevron-right"></i></a>
+                    </div>
+                    <div class="horizontal-scroll-container"></div>
+                `;
+
+                const scrollContainer = section.querySelector('.horizontal-scroll-container');
+                catProducts.forEach((p, pIndex) => {
+                    scrollContainer.appendChild(createProductCard(p, pIndex));
+                });
+
+                pGrid.appendChild(section);
+
+                // Insert the "Find Me" bar between visible categories
+                if (index < categoriesInFiltered.length - 1) {
+                    const inlineBar = document.createElement('div');
+                    inlineBar.className = 'find-me-inline-bar';
+                    inlineBar.onclick = openFindMeModal;
+                    inlineBar.innerHTML = `
+                        <div class="find-me-label"><div class="live-dot gold-dot"></div>SOURCING</div>
+                        <div class="find-me-bar-content">
+                            <i class="fa-solid fa-magnifying-glass-plus"></i>
+                            <span class="rotating-text-inline">Can't find what you want? 😊</span>
+                        </div>
+                    `;
+                    pGrid.appendChild(inlineBar);
+
+                    // Observe for reveal animation
+                    if (window.inlineBarObserver) {
+                        window.inlineBarObserver.observe(inlineBar);
+                    }
+                }
+            });
+        }
+
+        let currentSort = 'latest';
+
+        window.handleSort = (val) => {
+            currentSort = val;
+            filterAndRender();
+        };
+
+        function filterAndRender() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            let filtered = allProducts.filter(p => {
+                const matchesSearch = p.title.toLowerCase().includes(searchTerm);
+                const matchesCategory = currentCategory === 'All' || p.category === currentCategory;
+
+                const prodSubCat = p.subCategory || p.subcategory || 'All';
+                const matchesSubCategory = currentSubCategory === 'All' || prodSubCat === currentSubCategory;
+
+                const productGender = p.gender || 'Unisex';
+                const matchesGender = currentGender === 'All' ||
+                                      productGender === currentGender ||
+                                      productGender === 'Unisex';
+
+                return matchesSearch && matchesCategory && matchesSubCategory && matchesGender;
+            });
+
+            // Apply Sorting
+            if (currentSort === 'price-low') {
+                filtered.sort((a, b) => a.price - b.price);
+            } else if (currentSort === 'price-high') {
+                filtered.sort((a, b) => b.price - a.price);
+            } else if (currentSort === 'latest') {
+                filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            }
+
+            renderProducts(filtered);
+        }
+
+        // Variation state is managed globally
+
+
+        window.selectSize = (size, el) => {
+            selectedSize = size;
+            document.querySelectorAll('.size-chip').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+        };
+
+        window.selectColour = (colour, el) => {
+            selectedColour = colour;
+            document.querySelectorAll('.colour-chip').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+        };
+
+        window.chatWithSeller = (title, price, category, imageUrl) => {
+            let message = `Hello Modish Mix Store, I'm interested in:
+🛍️ *Product:* ${title}
+🏷️ *Category:* ${category || 'Store Item'}
+💰 *Price:* KSh ${price.toLocaleString()}`;
+
+            if (selectedSize) message += `\n📏 *Size:* ${selectedSize}`;
+            if (selectedColour) message += `\n🎨 *Colour:* ${selectedColour}`;
+
+            if (imageUrl) {
+                // Note: WhatsApp doesn't directly support sending images via URL in the text parameter,
+                // but providing the link often generates a rich preview.
+                message += `\n\n🖼️ *Product Image:* ${imageUrl}`;
+            }
+
+            window.open(`https://wa.me/254722635443?text=${encodeURIComponent(message)}`, '_blank');
+        };
+
+        window.quickAddToCart = (productId) => {
+            const p = allProducts.find(item => item.id === productId);
+            if (!p) return;
+
+            const existingItem = cart.find(item => item.title === p.title);
+            if (existingItem) {
+                existingItem.qty += 1;
+            } else {
+                cart.push({ ...p, qty: 1 });
+            }
+            updateCartBadges();
+
+            showToast("Added to cart successfully!");
+
+            const badge = document.getElementById('cartBadge');
+            if (badge) {
+                badge.style.transform = 'scale(1.4)';
+                setTimeout(() => badge.style.transform = 'scale(1)', 200);
+            }
+        };
+
+        window.handleSearch = () =>
+    requestAnimationFrame(() => {
+        filterAndRender();
+    });
+
+
+        window.filterByGender = (gender) => {
+            currentGender = gender;
+
+            // UI Update for nav items
+            document.querySelectorAll('.bottom-nav-item').forEach(btn => btn.classList.remove('active'));
+            if (gender === 'Male') document.getElementById('maleNavItem').classList.add('active');
+            else if (gender === 'Female') document.getElementById('femaleNavItem').classList.add('active');
+            else document.getElementById('homeNavItem').classList.add('active');
+
+            // Reset other filters to avoid confusion, or keep them?
+            // Usually gender is a top-level filter.
+            if (showroomSection.style.display === "none") returnToMainShowroom(true);
+
+            filterAndRender();
+        };
+
+        window.filterByCategory = (cat, subCat = 'All', shouldToggleDrawer = true) => {
+            currentCategory = cat;
+            currentSubCategory = subCat;
+
+            // Update UI feedback if needed
+            if (currentCategory === 'All') {
+                currentSubCategory = 'All';
+            }
+
+            // Ensure showroom is visible
+            if (showroomSection.style.display === "none" || document.body.classList.contains('overlay-active')) {
+                returnToMainShowroom(true);
+            }
+
+            requestAnimationFrame(() => {
+                filterAndRender();
+                updateSubCategoryBar(); // We'll define this to show chips
+            });
+
+            if (shouldToggleDrawer && sideDrawer.classList.contains('open')) toggleDrawer();
+        };
+
+        function updateSubCategoryBar() {
+            const container = document.getElementById('subCategoryFilterBar');
+            if (!container) return;
+
+            if (currentCategory === 'All') {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.innerHTML = '';
+            container.style.display = 'flex';
+
+            // Add "All" chip for the category
+            const allChip = document.createElement('div');
+            allChip.className = `sub-chip ${currentSubCategory === 'All' ? 'active' : ''}`;
+            allChip.innerText = 'All ' + currentCategory;
+            allChip.onclick = () => filterByCategory(currentCategory, 'All', false);
+            container.appendChild(allChip);
+
+            // Get data using the correct helper
+            const subCache = getCache('subcategories');
+            const catCache = getCache('categories');
+            const subData = subCache ? subCache.data : null;
+            const catData = catCache ? catCache.data : null;
+
+            // Find catId for currentCategory name
+            let catId = null;
+            if (catData) {
+                catId = Object.keys(catData).find(key => {
+                    const c = catData[key];
+                    return (typeof c === 'object' ? c.name : c) === currentCategory;
+                });
+            }
+
+            if (catId && subData && subData[catId]) {
+                const subs = subData[catId];
+                Object.keys(subs).forEach(sId => {
+                    const sName = subs[sId];
+                    const chip = document.createElement('div');
+                    chip.className = `sub-chip ${currentSubCategory === sName ? 'active' : ''}`;
+                    chip.innerText = sName;
+                    chip.onclick = () => filterByCategory(currentCategory, sName, false);
+                    container.appendChild(chip);
+                });
+            }
+        }
+
+        // --- RENDER DRAWER MENU ---
+        window.renderDrawerMenu = (categories, subcategories) => {
+            const drawerMenu = document.getElementById('drawerMenu');
+            if (!drawerMenu || !categories) return;
+
+            // Keep the static items (All Categories, Track Order)
+            let menuHtml = `
+                <li class="drawer-item"><a href="#" onclick="filterByCategory('All')"><i class="fa-solid fa-layer-group"></i> All Categories</a></li>
+                <li class="drawer-item"><a href="javascript:void(0)" onclick="openTrackingPage()"><i class="fa-solid fa-truck-fast"></i> Track Your Order</a></li>
+            `;
+
+            Object.keys(categories).forEach(catId => {
+                const cat = categories[catId];
+                // Subcategories are grouped by categoryId in the database
+                const catSubsObj = (subcategories && subcategories[catId]) ? subcategories[catId] : null;
+                const catSubsKeys = catSubsObj ? Object.keys(catSubsObj) : [];
+
+                menuHtml += `
+                    <li class="drawer-item">
+                        <div class="drawer-cat-row" onclick="const sub = this.parentElement.querySelector('.drawer-sub-menu'); if(sub) sub.classList.toggle('show'); this.querySelector('.expand-icon')?.classList.toggle('rotate');">
+                            <a href="#" onclick="filterByCategory('${cat.name}', 'All', true); event.stopPropagation();">
+                                <i class="fa-solid fa-tag"></i> ${cat.name}
+                            </a>
+                            ${catSubsKeys.length > 0 ? '<i class="fa-solid fa-chevron-down expand-icon" style="font-size: 0.7rem; margin-left: auto;"></i>' : ''}
+                        </div>
+                        ${catSubsKeys.length > 0 ? `
+                            <ul class="drawer-sub-menu">
+                                ${catSubsKeys.map(sId => `<li><a href="#" onclick="filterByCategory('${cat.name}', '${catSubsObj[sId]}')">${catSubsObj[sId]}</a></li>`).join('')}
+                            </ul>
+                        ` : ''}
+                    </li>
+                `;
+            });
+
+            drawerMenu.innerHTML = menuHtml;
+        };
+
+        window.toggleDrawer = () => {
+            sideDrawer.classList.toggle('open');
+            drawerOverlay.classList.toggle('show');
+            if (sideDrawer.classList.contains('open')) pushTemporaryState();
+        };
+
+
+        drawerOverlay.addEventListener('click', () => { if(sideDrawer.classList.contains('open')) toggleDrawer(); });
+
+        window.selectSize = (size, el) => {
+            selectedSize = size;
+            document.querySelectorAll('.size-chip').forEach(c => c.classList.remove('active'));
+            if (el) el.classList.add('active');
+        };
+
+        window.selectColour = (colour, el) => {
+            selectedColour = colour;
+            document.querySelectorAll('.colour-chip').forEach(c => c.classList.remove('active'));
+            if (el) el.classList.add('active');
+        };
+
+        window.shareProduct = (e, id, title) => {
+            if (e) e.stopPropagation();
+            const shareData = {
+                title: title,
+                text: `Check out ${title} on Modish Mix Store!`,
+                url: window.location.origin + window.location.pathname + '?product=' + id
+            };
+
+            if (navigator.share) {
+                navigator.share(shareData).catch(err => console.log('Error sharing:', err));
+            } else {
+                const dummy = document.createElement('input');
+                document.body.appendChild(dummy);
+                dummy.value = shareData.url;
+                dummy.select();
+                document.execCommand('copy');
+                document.body.removeChild(dummy);
+                alert('Link copied to clipboard!');
+            }
+        };
+
+        window.openProductDisplay = (p) => {
+            currentItem = p;
+            renderModalContent(p);
+            // Reset selectors
+            selectedSize = null;
+            selectedColour = null;
+            productModal.classList.add('active');
+            document.body.style.overflow = "hidden";
+            pushTemporaryState();
+        };
+
+        window.notifyRestock = (title, category) => {
+            let message = `Hello Modish Mix Store, I'm interested in:
+🛍️ *Product:* ${title}
+🏷️ *Category:* ${category || 'Store Item'}
+
+It's currently out of stock. Please notify me once you restock this item! 😊`;
+            window.open(`https://wa.me/254722635443?text=${encodeURIComponent(message)}`, '_blank');
+        };
+
+        function renderModalContent(p) {
+            const pathText = "Home / " + (p.category || 'Store') + (p.subcategory ? ` / ${p.subcategory}` : '');
+            document.getElementById('modalPath').innerText = pathText;
+            document.getElementById('modalTitle').innerText = p.title;
+            document.getElementById('modalPrice').innerText = "KSh " + p.price.toLocaleString();
+
+            const shareBtn = document.getElementById('modalShareBtn');
+            if (shareBtn) {
+                shareBtn.onclick = (e) => shareProduct(e, p.id, p.title);
+            }
+
+            const modalWishBtn = document.getElementById('modalWishlistBtn');
+            if (modalWishBtn) {
+                const isInWishlist = wishlist.some(item => item.id === p.id);
+                modalWishBtn.querySelector('i').className = isInWishlist ? 'fa-solid fa-heart' : 'fa-regular fa-heart';
+                modalWishBtn.onclick = (e) => {
+                    toggleWishlist(e, p.id);
+                    const nowIn = wishlist.some(item => item.id === p.id);
+                    modalWishBtn.querySelector('i').className = nowIn ? 'fa-solid fa-heart' : 'fa-regular fa-heart';
+                };
+            }
+
+            const oldPriceEl = document.getElementById('modalOldPrice');
+            if (p.originalPrice && p.originalPrice > p.price) {
+                oldPriceEl.innerText = "KSh " + p.originalPrice.toLocaleString();
+                oldPriceEl.style.display = "inline";
+            } else {
+                oldPriceEl.style.display = "none";
+            }
+
+            const descEl = document.getElementById('modalDesc');
+            descEl.innerText = p.description || "Premium quality product from Modish Mix Store. Designed for durability and style.";
+
+            // Handle Sizes and Colours
+            selectedSize = null;
+            selectedColour = null;
+            const sizeSec = document.getElementById('sizeSelection');
+            const colourSec = document.getElementById('colourSelection');
+            const sizeChips = document.getElementById('sizeChips');
+            const colourChips = document.getElementById('colourChips');
+
+            if (p.sizes && p.sizes.length > 0) {
+                sizeSec.style.display = 'block';
+                sizeChips.innerHTML = p.sizes.map(s => `<div class="size-chip" onclick="selectSize('${s}', this)">${s}</div>`).join('');
+            } else {
+                sizeSec.style.display = 'none';
+            }
+
+            if (p.colours && p.colours.length > 0) {
+                colourSec.style.display = 'block';
+                colourChips.innerHTML = p.colours.map(c => `<div class="colour-chip" onclick="selectColour('${c}', this)">${c}</div>`).join('');
+            } else {
+                colourSec.style.display = 'none';
+            }
+
+            const stockEl = document.getElementById('modalStockStatus');
+            const isOutOfStock = p.outOfStock === true;
+            stockEl.innerText = isOutOfStock ? "Out of Stock" : "In Stock";
+            stockEl.style.color = isOutOfStock ? "#e74c3c" : "#27ae60";
+
+            // Update button visibility based on stock
+            const actionsRow = document.getElementById('modalActionsRow');
+            const buyBtn = document.getElementById('modalBuyBtn');
+            const chatBtn = document.getElementById('modalChatBtn');
+            const notifyBtn = document.getElementById('modalNotifyBtn');
+
+            if (isOutOfStock) {
+                actionsRow.style.display = "none";
+                buyBtn.style.display = "none";
+                chatBtn.style.display = "none";
+                notifyBtn.style.display = "flex";
+                notifyBtn.onclick = () => notifyRestock(p.title, p.category);
+            } else {
+                actionsRow.style.display = "flex";
+                buyBtn.style.display = "block";
+                chatBtn.style.display = "block";
+                notifyBtn.style.display = "none";
+            }
+
+            const iconBox = document.getElementById('modalMainIcon');
+            const galleryStrip = document.getElementById('modalGallery');
+
+            // Handle Images
+            let images = [];
+            if (p.images && Array.isArray(p.images) && p.images.length > 0) {
+                images = p.images;
+            } else if (p.imageUrl) {
+                images = [p.imageUrl];
+            }
+
+            if (images.length > 0) {
+                iconBox.innerHTML = `<img loading="lazy" decoding="async" src="${images[0]}" alt="${p.title}" id="currentModalImg">`;
+
+                if (images.length > 1) {
+                    galleryStrip.style.display = 'flex';
+                    galleryStrip.innerHTML = images.map((img, idx) => `
+                        <div class="modal-thumb ${idx === 0 ? 'active' : ''}" onclick="switchModalImage('${img}', this)">
+                            <img src="${img}" alt="Thumbnail ${idx + 1}">
+                        </div>
+                    `).join('');
+                } else {
+                    galleryStrip.style.display = 'none';
+                }
+            } else {
+                iconBox.innerHTML = `<i class="fa-solid ${p.icon || 'fa-box'}" style="font-size: 5rem; color: #ddd;"></i>`;
+                galleryStrip.style.display = 'none';
+            }
+
+            document.getElementById('modalChatBtn').onclick = () => chatWithSeller(p.title, p.price, p.category, (images[0] || ''));
+        }
+
+        window.switchModalImage = (src, thumbEl) => {
+            const mainImg = document.getElementById('currentModalImg');
+            if (mainImg) mainImg.src = src;
+
+            document.querySelectorAll('.modal-thumb').forEach(el => el.classList.remove('active'));
+            if (thumbEl) thumbEl.classList.add('active');
+        };
+
+        window.closeProductDisplay = (isPopStateProcessing = false) => {
+            productModal.classList.remove('active');
+            document.body.style.overflow = "auto";
+            // Check if we actually have a state to pop to avoid unwanted navigation
+            if (!isPopStateProcessing && history.state && history.state.activeView === "modalOrCheckout") {
+                history.back();
+            }
+        };
+
+        window.updateQty = (amount) => {
+            const qtyInput = document.getElementById('qtyInput');
+            let currentVal = parseInt(qtyInput.value);
+            currentVal += amount;
+            if (currentVal < 1) currentVal = 1;
+            qtyInput.value = currentVal;
+        };
+
+        window.addToCart = () => {
+            const qty = parseInt(document.getElementById('qtyInput').value);
+
+            if (currentItem.sizes && currentItem.sizes.length > 0 && !selectedSize) {
+                showToast("Please select a size");
+                return;
+            }
+            if (currentItem.colours && currentItem.colours.length > 0 && !selectedColour) {
+                showToast("Please select a colour");
+                return;
+            }
+
+            let itemTitle = currentItem.title;
+            if (selectedSize || selectedColour) {
+                let options = [];
+                if (selectedSize) options.push(selectedSize);
+                if (selectedColour) options.push(selectedColour);
+                itemTitle += ` (${options.join(' / ')})`;
+            }
+
+            const existingItem = cart.find(item => item.title === itemTitle);
+            if (existingItem) {
+                existingItem.qty += qty;
+            } else {
+                cart.push({ ...currentItem, title: itemTitle, originalTitle: currentItem.title, selectedSize, selectedColour, qty });
+            }
+            updateCartBadges();
+            showToast("Added to cart!");
+            closeProductDisplay();
+        };
+
+        window.proceedToCheckoutView = () => {
+            if (currentItem.sizes && currentItem.sizes.length > 0 && !selectedSize) {
+                showToast("Please select a size");
+                return;
+            }
+            if (currentItem.colours && currentItem.colours.length > 0 && !selectedColour) {
+                showToast("Please select a colour");
+                return;
+            }
+
+            closeProductDisplay(true);
+
+            // For single-item "Buy Now", we add it to cart first
+            const qty = parseInt(document.getElementById('qtyInput').value);
+
+            let itemTitle = currentItem.title;
+            if (selectedSize || selectedColour) {
+                let options = [];
+                if (selectedSize) options.push(selectedSize);
+                if (selectedColour) options.push(selectedColour);
+                itemTitle += ` (${options.join(' / ')})`;
+            }
+
+            const existingItem = cart.find(item => item.title === itemTitle);
+            if (!existingItem) {
+                cart.push({ ...currentItem, title: itemTitle, originalTitle: currentItem.title, selectedSize, selectedColour, qty });
+            } else {
+                existingItem.qty = qty;
+            }
+            updateCartBadges();
+
+            showroomSection.style.display = "none";
+            cartSection.classList.remove('active');
+            profileSection.classList.remove('active');
+            checkoutSection.classList.add('active');
+            document.body.classList.add('overlay-active');
+            window.scrollTo(0, 0);
+
+            updateCheckoutSummary();
+            pushTemporaryState();
+        };
+
+        window.returnToMainShowroom = (isPopStateProcessing = false) => {
+            updateBottomNavActive(0);
+            checkoutSection.classList.remove('active');
+            cartSection.classList.remove('active');
+            profileSection.classList.remove('active');
+            document.getElementById('trackingSection').classList.remove('active');
+            document.body.classList.remove('overlay-active');
+            showroomSection.style.display = "block";
+            window.scrollTo(0, 0);
+            if (!isPopStateProcessing && history.state && history.state.activeView === "modalOrCheckout") {
+                history.back();
+            }
+        };
+
+        window.togglePaymentView = (mode) => {
+            const submitBtn = document.getElementById('submitOrderBtn');
+            const tillInfo = document.getElementById('manualTillInfo');
+            if (mode === 'mpesa') {
+                submitBtn.classList.remove('whatsapp-variant');
+                submitBtn.innerHTML = `<i class="fa-solid fa-lock"></i> <span>Place Order & Pay</span>`;
+                if (tillInfo) tillInfo.style.display = 'block';
+            } else {
+                submitBtn.classList.add('whatsapp-variant');
+                submitBtn.innerHTML = `<i class="fa-brands fa-whatsapp" style="font-size: 1.4rem;"></i> <span>Order via WhatsApp</span>`;
+                if (tillInfo) tillInfo.style.display = 'none';
+            }
+        };
+
+        window.handleFormSubmission = async (event) => {
+            event.preventDefault();
+
+            const selectedPayment = document.querySelector('input[name="paymentMethod"]:checked').value;
+            const customerPhone = document.getElementById('billingPhone').value.trim();
+            const selectedQty = parseInt(document.getElementById('qtyInput').value);
+            const totalBillAmount = totalAmount;
+
+            const firstName = document.getElementById('billingFirstName').value;
+            const lastName = document.getElementById('billingLastName').value;
+            const address = document.getElementById('billingAddress').value;
+            const town = document.getElementById('billingTown').value;
+            const county = document.getElementById('billingCounty').value;
+
+            // --- STRICT LOCATION VALIDATION ---
+            if (selectedPayment === "Cash on Delivery" && county !== "Uasin Gishu") {
+                alert("⚠️ Cash on Delivery is strictly limited to Eldoret town (Uasin Gishu County). Please choose 'Lipa na M-PESA' for other locations.");
+                return;
+            }
+
+            let userData = {};
+            if (currentUser) {
+                const userRef = ref(db, 'users/' + currentUser.uid + '/billingInfo');
+                const userSnap = await get(userRef);
+                userData = userSnap.val() || {};
+            }
+
+            // Save order to Firebase first (Pending status)
+            const orderData = {
+                customerName: `${firstName} ${lastName}`,
+                phone: customerPhone,
+                address: `${address}, ${town}, ${county}`,
+                deliveryLocation: userData.deliveryLocation || null,
+                email: (document.getElementById('billingEmail')?.value || "").trim().toLowerCase(),
+                items: cart.map(i => ({
+                    title: i.title || "Unknown Product",
+                    qty: i.qty || 1,
+                    size: i.selectedSize || null,
+                    colour: i.selectedColour || null,
+                    price: i.price || 0,
+                    image: i.img || i.imageUrl || null
+                })),
+                selectedSize: cart.length === 1 ? (cart[0].selectedSize || null) : null,
+                selectedColour: cart.length === 1 ? (cart[0].selectedColour || null) : null,
+                productTitle: cart.length === 1 ? (cart[0].originalTitle || cart[0].title) : `${cart.length} items in cart`,
+                productImage: cart.length > 0 ? (cart[0].img || cart[0].imageUrl || null) : null,
+                amount: totalBillAmount || 0,
+                quantity: cart.reduce((s, i) => s + (i.qty || 0), 0),
+                paymentMethod: selectedPayment,
+                status: 'Pending',
+                timestamp: Date.now()
+            };
+
+            function generateCustomOrderId() {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let randomPart = '';
+                for (let i = 0; i < 6; i++) {
+                    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                const datePart = new Date().getTime().toString().slice(-4);
+                return `MMS-${randomPart}${datePart}`;
+            }
+
+            // Helper to remove undefined values for Firebase
+            const cleanData = (obj) => {
+                const newObj = {};
+                Object.keys(obj).forEach(key => {
+                    if (obj[key] !== undefined) {
+                        newObj[key] = (obj[key] === Object(obj[key])) ? cleanData(obj[key]) : obj[key];
+                    } else {
+                        newObj[key] = null;
+                    }
+                });
+                return newObj;
+            };
+
+            const orderId = generateCustomOrderId();
+            const orderRef = ref(db, `orders/${orderId}`);
+            await set(orderRef, cleanData(orderData));
+
+            // Save billing info to user profile if logged in
+            if (currentUser) {
+                await update(ref(db, `users/${currentUser.uid}/billingInfo`), {
+                    firstName, lastName, address, town, county, phone: customerPhone, email: orderData.email
+                });
+            }
+
+            if (selectedPayment === "Lipa na M-PESA") {
+                mpesaLoader.classList.add('active');
+                document.getElementById('loaderTitle').innerText = "Sending M-PESA STK Push...";
+                document.getElementById('loaderMessage').innerText = `Requesting KSh ${totalBillAmount.toLocaleString()} authorization on handset phone number: ${customerPhone}.`;
+
+                // --- IMPROVED PHONE FORMATTING (254...) ---
+                let cleanPhone = customerPhone.replace(/\D/g, '');
+                if (cleanPhone.startsWith('0')) {
+                    cleanPhone = '254' + cleanPhone.slice(1);
+                } else if (cleanPhone.startsWith('7') || cleanPhone.startsWith('1')) {
+                    cleanPhone = '254' + cleanPhone;
+                } else if (cleanPhone.startsWith('+')) {
+                    cleanPhone = cleanPhone.slice(1);
+                }
+
+                try {
+                    // Update this URL after deploying your backend to Render
+                    const backendUrl = 'https://kopokopo-backend.onrender.com/api/stkpush';
+
+                    console.log(`🚀 Sending STK Push request to: ${backendUrl} for ${cleanPhone}`);
+
+                    const response = await fetch(backendUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            phoneNumber: cleanPhone,
+                            amount: totalBillAmount,
+                            orderId: orderId,
+                            firstName: firstName,
+                            lastName: lastName,
+                            email: orderData.email
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        let errorMsg = 'Server Error';
+                        if (errorData.details && errorData.details.error_message) {
+                            errorMsg = errorData.details.error_message;
+                        } else if (errorData.error) {
+                            errorMsg = errorData.error;
+                        }
+                        throw new Error(`Payment Failed: ${errorMsg}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (response.ok && data.ResponseCode === "0") {
+                        // Store CheckoutRequestID for tracking
+                        await update(ref(db, `orders/${orderId}`), {
+                            checkoutRequestID: data.CheckoutRequestID,
+                            merchantRequestID: data.MerchantRequestID
+                        });
+
+                        cart = [];
+                        updateCartBadges();
+
+                        document.getElementById('loaderTitle').innerText = "✓ Push Sent!";
+                        document.getElementById('loaderMessage').innerHTML = `Check your phone screen for the Safaricom PIN window prompt to authorize KSh ${totalBillAmount.toLocaleString()}.<br><br>
+                        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                            <small style="color: #a0a0b8;">Order ID:</small><br>
+                            <strong style="color: var(--gold); font-family: monospace;">${orderId}</strong>
+                        </div>
+                        <div class="spinner-ring" style="width:30px; height:30px; margin: 10px auto; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--gold); border-radius: 50%; animation: spin 1s linear infinite;"></div><p style="font-size:0.8rem; margin-top:10px;">Waiting for payment confirmation...</p>`;
+
+                        // Start listening for status change
+                        const orderStatusRef = ref(db, `orders/${orderId}/status`);
+                        const unsubscribe = onValue(orderStatusRef, (snapshot) => {
+                            const status = snapshot.val();
+                            const successStatuses = ['preparing your order', 'shipping', 'in transit', 'arrived', 'delivered', 'signed', 'completed'];
+                            if (status && successStatuses.includes(status.toLowerCase())) {
+                                document.getElementById('loaderTitle').innerText = "✅ Payment Successful!";
+                                document.getElementById('loaderMessage').innerHTML = `Your order has been confirmed. Thank you for shopping with us!<br><br>
+                                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+                                    <button onclick="window.location.reload()" style="background:#2ecc71; color:white; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Return to Store</button>
+                                    <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:var(--gold); color:black; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Track Order</button>
+                                </div>`;
+                                unsubscribe();
+                            } else if (status === 'Failed') {
+                                document.getElementById('loaderTitle').innerText = "❌ Payment Failed";
+                                document.getElementById('loaderMessage').innerHTML = `Transaction was not successful. Please try again or use the manual Till.<br><br><button onclick="window.location.reload()" style="background:var(--accent-red); color:white; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; margin-top:10px; cursor:pointer; text-transform:uppercase;">Try Again</button>`;
+                                unsubscribe();
+                            }
+                        });
+
+                        // Timeout listener after 2 minutes
+                        setTimeout(() => unsubscribe(), 120000);
+                    } else {
+                        throw new Error(data.CustomerMessage || data.message || "Failed to trigger push");
+                    }
+
+                } catch (error) {
+                    console.error("Payment Error:", error);
+                    document.getElementById('loaderTitle').innerText = "⚠️ Payment Processing";
+                    const displayTill = window.currentTillNumber || "3309609";
+                    document.getElementById('loaderMessage').innerHTML = `We couldn't trigger the automated prompt, but your order is saved!<br>
+                    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                        <small style="color: #a0a0b8;">Order ID:</small> <strong style="color: var(--gold); font-family: monospace;">${orderId}</strong>
+                    </div>
+                    Please pay KSh ${totalBillAmount.toLocaleString()} to Till: <b>${displayTill}</b> manually.<br><br>
+                    <p id="manualStatusSub" style="font-size: 0.75rem; color: #a0a0b8; margin-bottom: 10px;">Waiting for admin to confirm payment...</p>
+                    <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                        <button onclick="signalManualPayment('${orderId}')" style="background:var(--gold); color:black; border:none; padding:12px 24px; border-radius:4px; font-weight:800; cursor:pointer; text-transform:uppercase; letter-spacing:1px; width: 100%; max-width: 250px;">I have paid manually</button>
+                        <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:transparent; color:var(--gold); border: 1px solid var(--gold); padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Track My Order</button>
+                    </div>`;
+
+                    // Listen for status even in manual mode (if admin updates it)
+                    const manualStatusRef = ref(db, `orders/${orderId}/status`);
+                    const unsubManual = onValue(manualStatusRef, (snapshot) => {
+                        const status = snapshot.val();
+                        const successStatuses = ['preparing your order', 'shipping', 'in transit', 'arrived', 'delivered', 'signed', 'completed'];
+                        if (status && successStatuses.includes(status.toLowerCase())) {
+                            document.getElementById('loaderTitle').innerText = "✅ Payment Confirmed!";
+                            document.getElementById('loaderMessage').innerHTML = `Admin has confirmed your payment. Thank you!<br><br>
+                            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+                                <button onclick="window.location.reload()" style="background:#2ecc71; color:white; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Return to Store</button>
+                                <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:var(--gold); color:black; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Track Order</button>
+                            </div>`;
+                            unsubManual();
+                        }
+                    });
+                }
+
+            } else {
+                const whatsappMsg = `🛒 *NEW ORDER (CASH ON DELIVERY)* \n\n` +
+                                     `⚠️ *Note:* Restricted to Eldoret Town Delivery Only\n\n` +
+                                     `📦 *Items:* \n${cart.map(i => `- ${i.title} x ${i.qty}`).join('\n')}\n\n` +
+                                     `💰 *Total:* KSh ${totalBillAmount.toLocaleString()}\n\n` +
+                                     `👤 *Customer:* ${firstName} ${lastName}\n` +
+                                     `📞 *Phone:* ${customerPhone}\n` +
+                                     `📍 *Address:* ${address}, ${town}, ${county} County`;
+
+                cart = [];
+                updateCartBadges();
+                localStorage.removeItem('mms_cart');
+                window.open(`https://wa.me/254722635443?text=${encodeURIComponent(whatsappMsg)}`, '_blank');
+                setTimeout(() => location.reload(), 2000);
+            }
+        };
+
+        // --- NAVIGATION STATE MANAGEMENT ---
+        const headerEl = document.querySelector('header');
+        const hotSellEl = document.getElementById('hotSellBanner');
+
+        const updateHeaderH = () => {
+            if (headerEl) {
+                const headerH = headerEl.offsetHeight;
+                document.documentElement.style.setProperty('--header-h', headerH + 'px');
+            }
+        };
+
+        if (headerEl) {
+            const ro = new ResizeObserver(() => {
+                updateHeaderH();
+            });
+            ro.observe(headerEl);
+            updateHeaderH();
+            updateWishlistDisplay();
+        }
+
+        // Use hysteresis to prevent "shaking" at the scroll threshold
+        let isHeaderScrolled = false;
+        window.addEventListener('scroll', () => {
+            const scrollPos = window.scrollY;
+
+            if (!isHeaderScrolled && scrollPos > 100) {
+                isHeaderScrolled = true;
+                headerEl.classList.add('scrolled');
+                updateHeaderH();
+            } else if (isHeaderScrolled && scrollPos < 40) {
+                isHeaderScrolled = false;
+                headerEl.classList.remove('scrolled');
+                updateHeaderH();
+            }
+
+            // Still update height for subtle changes if needed
+            if (scrollPos % 5 === 0) updateHeaderH();
+        }, { passive: true });
+
+        window.addEventListener('popstate', function (event) {
+            if (sideDrawer.classList.contains('open')) { toggleDrawer(); return; }
+            if (productModal.classList.contains('active')) { closeProductDisplay(true); return; }
+            if (document.getElementById('policyModal').classList.contains('active')) { closePolicyModal(true); return; }
+            if (cartSection.classList.contains('active')) { returnToMainShowroom(true); return; }
+            if (checkoutSection.classList.contains('active')) { returnToMainShowroom(true); return; }
+            if (profileSection.classList.contains('active')) { returnToMainShowroom(true); return; }
+            if (document.getElementById('trackingSection').classList.contains('active')) { returnToMainShowroom(true); return; }
+        });
+
+        function pushTemporaryState() {
+            history.pushState({ activeView: "modalOrCheckout" }, document.title, window.location.href);
+        }
+
+        window.signalManualPayment = async (orderId) => {
+            document.getElementById('manualStatusSub').innerHTML = '<div style="display:flex; flex-direction:column; align-items:center; gap:10px;"><div class="spinner-ring" style="width:20px; height:20px; border:2px solid rgba(255,255,255,0.1); border-top-color:var(--gold); border-radius:50%; animation:spin 1s linear infinite;"></div> <span>Confirming payment with admin...</span><div style="width:100%; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden;"><div id="manualLoadingBar" style="width:0%; height:100%; background:var(--gold); transition: width 0.3s ease;"></div></div></div>';
+
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 95) progress = 95;
+                const bar = document.getElementById('manualLoadingBar');
+                if (bar) bar.style.width = progress + '%';
+            }, 500);
+
+            try {
+                // Signal to admin by updating a 'manualConfirmationRequested' flag or similar
+                // We'll use a specific field 'paymentSignal' to trigger the admin alarm
+                await update(ref(db, `orders/${orderId}`), {
+                    paymentSignal: 'manual_pending',
+                    signalTimestamp: Date.now()
+                });
+
+                localStorage.removeItem('mms_cart');
+                updateCartBadges();
+
+                // Keep listening for 'Completed' status which happens when admin clicks confirm
+            } catch (e) {
+                console.error("Signal failed", e);
+                alert("Failed to notify admin. Please contact support via WhatsApp.");
+            }
+        };
+
+        window.copyTill = () => {
+            const till = window.currentTillNumber || "3309609";
+            navigator.clipboard.writeText(till).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.innerText = "COPIED!";
+                btn.style.borderColor = "var(--whatsapp-green)";
+                setTimeout(() => { btn.innerText = "COPY"; btn.style.borderColor = ""; }, 2000);
+            });
+        };
+
+    </script>
+
+    <!-- Floating Live Customer Care Button -->
+    <div class="floating-chat-btn" onclick="window.location.href='chat'" title="Live Customer Care">
+        <i class="fa-solid fa-headset"></i>
+        <span class="chat-badge-live">Live</span>
+    </div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "hosting": {
+    "site": "school-system-a97a4",
+    "public": ".",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "netlify/**",
+      "server.js",
+      "package.json",
+      "package-lock.json",
+      "functions/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "database": {
+    "rules": "database.rules.json"
+  }
+}
