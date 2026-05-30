@@ -1,8 +1,8 @@
 const axios = require('axios');
 
-const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID;
-const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET;
-const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER;
+const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || 'NLWEWv831tup-WOMWOcDgpiIOSwJ4jV1s_U6unHEwfg';
+const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || 'ITzJF5mdKR94qGleGgurJjroK5KdF7IWbMBefLtFunw';
+const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || '3309609';
 const BASE_URL = 'https://api.kopokopo.com';
 
 exports.stkPush = async (req, res) => {
