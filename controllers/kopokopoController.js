@@ -63,8 +63,12 @@ exports.stkPush = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Kopo Kopo Error:', error.response ? error.response.data : error.message);
-        res.status(500).json({ error: 'Request Failed' });
+        const errorData = error.response ? error.response.data : error.message;
+        console.error('❌ Kopo Kopo Error:', errorData);
+        res.status(500).json({
+            error: 'Request Failed',
+            details: errorData
+        });
     }
 };
 
