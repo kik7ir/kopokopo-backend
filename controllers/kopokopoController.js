@@ -1,33 +1,55 @@
 const axios = require('axios');
 
+/**
+ * KOPO KOPO V2 INTEGRATION - MODISH MIX STORE
+ *
+ * CRITICAL RULES COMPLIANCE:
+ * ✔ Always use HTTPS: Enforced via BASE_URL and Render endpoint.
+ * ✔ Always use backend: Sensitive credentials (ID/Secret) are never exposed to the frontend.
+ * ✔ OAuth2 Token: A fresh token is requested for every STK Push transaction.
+ * ✔ Callback URL: Mandatory callback is included in every STK Push payload for status updates.
+ */
+
 // Configuration
 const BASE_URL = process.env.KOPOKOPO_BASE_URL || 'https://api.kopokopo.com';
 const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || 'NLWEWv831tup-WOMWOcDgpiIOSwJ4jV1s_U6unHEwfg';
 const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || 'ITzJF5mdKR94qGleGgurJjroK5KdF7IWbMBefLtFunw';
 const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || '3309609';
+const DB_URL = "https://school-system-a97a4-default-rtdb.firebaseio.com";
 
 // STEP 1: Get Access Token (Helper)
+// Rule: Use OAuth token for every request
 async function getToken() {
-    const res = await axios.post(`${BASE_URL}/oauth/token`, {
-        grant_type: "client_credentials",
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET
-    });
-    return res.data.access_token;
+    try {
+        const res = await axios.post(`${BASE_URL}/oauth/token`, {
+            grant_type: "client_credentials",
+            client_id: CLIENT_ID,
+            client_secret: CLIENT_SECRET
+        });
+        return res.data.access_token;
+    } catch (err) {
+        console.error("❌ Kopo Kopo Auth Failed:", err.response?.data || err.message);
+        throw new Error("Authentication failed with payment gateway.");
+    }
 }
 
-// STEP 2: STK Push Request (Button Trigger)
+// STEP 2: STK Push Request
 exports.stkPush = async (req, res) => {
     const { phoneNumber, amount, orderId, firstName, lastName, email } = req.body;
 
     try {
         const token = await getToken();
 
-        // Ensure E.164 formatting for Kopo Kopo V2 (+254...)
+        // Phone Normalization: Kopo Kopo V2 requires E.164 (+254...)
         let phone = phoneNumber.replace(/\D/g, '');
         if (phone.startsWith('0')) phone = '254' + phone.slice(1);
         if (!phone.startsWith('254')) phone = '254' + phone;
         phone = '+' + phone;
+
+        // Rule: Must include callback URL
+        const callbackUrl = `${process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback'}?orderId=${orderId}`;
+
+        console.log(`🚀 Initiating STK Push: Order ${orderId} | Phone ${phone}`);
 
         const response = await axios.post(
             `${BASE_URL}/api/v2/incoming_payments`,
@@ -36,7 +58,7 @@ exports.stkPush = async (req, res) => {
                 till_number: TILL_NUMBER,
                 subscriber: {
                     first_name: firstName || "Customer",
-                    last_name: lastName || "Name",
+                    last_name: lastName || "User",
                     phone_number: phone,
                     email: email || "customer@example.com"
                 },
@@ -48,7 +70,7 @@ exports.stkPush = async (req, res) => {
                     order_id: orderId
                 },
                 _links: {
-                    callback_url: `${process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback'}?orderId=${orderId}`
+                    callback_url: callbackUrl
                 }
             },
             {
@@ -64,58 +86,81 @@ exports.stkPush = async (req, res) => {
         res.json({
             success: true,
             ResponseCode: "0",
-            message: "STK push sent",
+            message: "STK push initiated",
             CheckoutRequestID: response.headers.location || orderId,
             data: response.data
         });
 
     } catch (err) {
         const errorData = err.response ? err.response.data : err.message;
-        console.error('❌ Kopo Kopo Error:', JSON.stringify(errorData, null, 2));
+        console.error('❌ STK Push Failed:', JSON.stringify(errorData, null, 2));
         res.status(500).json({
             success: false,
-            error: 'Payment failed',
+            error: 'Payment processing failed',
             details: errorData
         });
     }
 };
 
-// STEP 3: Handle Callback
+// STEP 3: Handle Callback (STK Push Result)
 exports.handleCallback = async (req, res) => {
     const { orderId } = req.query;
     const payload = req.body;
 
-    console.log(`\n🔔 Kopo Kopo Callback Received for Order: ${orderId}`);
-    // console.log(JSON.stringify(payload, null, 2));
+    // Reliability: Check metadata if orderId is missing from query string
+    const targetOrderId = orderId || payload.data?.attributes?.metadata?.order_id;
+
+    console.log(`\n🔔 Payment Callback: Order ${targetOrderId}`);
 
     try {
-        const DB_URL = "https://school-system-a97a4-default-rtdb.firebaseio.com";
-        const orderUpdateUrl = `${DB_URL}/orders/${orderId}.json`;
+        if (!targetOrderId) throw new Error("Missing Order Reference");
 
-        // Kopo Kopo V2 structure: payload.data.attributes.status
+        const orderUpdateUrl = `${DB_URL}/orders/${targetOrderId}.json`;
         const status = payload.data?.attributes?.status;
 
         if (status === 'Success') {
-            const event = payload.data.attributes.event;
-            const resource = event.resource;
+            const resource = payload.data.attributes.event.resource;
             const receipt = resource.reference || resource.system_generate_number;
 
-            console.log(`✅ Payment SUCCESS for Order ${orderId}. Receipt: ${receipt}`);
+            console.log(`✅ PAID: Order ${targetOrderId} | Receipt: ${receipt}`);
 
             await axios.patch(orderUpdateUrl, {
                 status: 'Preparing Your Order',
                 mpesaReceiptNumber: receipt,
                 paidAt: new Date().toISOString()
             });
-        } else if (status === 'Failed') {
-            console.log(`❌ Payment FAILED for Order ${orderId}`);
+        } else {
+            console.log(`❌ FAILED: Order ${targetOrderId} | Reason: ${status}`);
             await axios.patch(orderUpdateUrl, {
                 status: 'Failed',
-                failureReason: payload.data?.attributes?.result_description || 'Payment was unsuccessful.'
+                failureReason: payload.data?.attributes?.result_description || 'Transaction unsuccessful'
             });
         }
     } catch (error) {
         console.error('❌ Callback Processing Error:', error.message);
+    }
+
+    res.sendStatus(200); // Always acknowledge the callback to Kopo Kopo
+};
+
+// STEP 4: Webhook Handler (Buy Goods/Account Events)
+exports.webhook = async (req, res) => {
+    console.log("🔔 Webhook Received:", JSON.stringify(req.body, null, 2));
+
+    try {
+        const attributes = req.body.data?.attributes;
+        const orderId = attributes?.metadata?.order_id;
+
+        if (attributes?.status === 'Success' && orderId) {
+            console.log(`✅ Webhook: Order ${orderId} verified as PAID`);
+            await axios.patch(`${DB_URL}/orders/${orderId}.json`, {
+                status: 'Preparing Your Order',
+                paidVia: 'Webhook Notification',
+                paidAt: new Date().toISOString()
+            });
+        }
+    } catch (error) {
+        console.error('❌ Webhook Error:', error.message);
     }
 
     res.sendStatus(200);
