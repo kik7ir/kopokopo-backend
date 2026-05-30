@@ -29,17 +29,13 @@ exports.stkPush = async (req, res) => {
         const baseCallbackUrl = process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback';
         const callbackUrl = `${baseCallbackUrl}?orderId=${orderId}`;
 
-        // 3. Create Payment (Using the flat structure from your example)
+        // 3. Create Payment (Matches your example exactly)
         const paymentPayload = {
             phone_number: formattedPhone,
             currency: 'KES',
             amount: amount,
-            description: `Payment for Order #${orderId} - ${firstName} ${lastName}`,
-            callback_url: callbackUrl,
-            metadata: {
-                order_id: orderId,
-                till_number: TILL_NUMBER
-            }
+            description: `Order #${orderId} - ${firstName} ${lastName}`,
+            callback_url: callbackUrl
         };
 
         console.log('🚀 Sending to Kopo Kopo /payments:', JSON.stringify(paymentPayload, null, 2));
