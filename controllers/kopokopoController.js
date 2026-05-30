@@ -14,8 +14,10 @@ const axios = require('axios');
 const BASE_URL = process.env.KOPOKOPO_BASE_URL || 'https://api.kopokopo.com';
 const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || 'NLWEWv831tup-WOMWOcDgpiIOSwJ4jV1s_U6unHEwfg';
 const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || 'ITzJF5mdKR94qGleGgurJjroK5KdF7IWbMBefLtFunw';
+
+// Rule: Till number can be "1234567" or "K000000" (per official V2 spec)
 const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || '3309609';
-const DB_URL = "https://school-system-a97a4-default-rtdb.firebaseio.com";
+const DB_URL = process.env.FIREBASE_DB_URL || "https://school-system-a97a4-default-rtdb.firebaseio.com";
 
 // STEP 1: Get Access Token (Helper)
 // Rule: Use OAuth token for every request
