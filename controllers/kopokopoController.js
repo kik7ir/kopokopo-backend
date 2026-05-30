@@ -29,7 +29,7 @@ exports.stkPush = async (req, res) => {
         const baseCallbackUrl = process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback';
         const callbackUrl = `${baseCallbackUrl}?orderId=${orderId}`;
 
-        const paymentResponse = await axios.post(`${BASE_URL}/api/v1/incoming_payments`, {
+        const paymentPayload = {
             payment_channel: 'm-pesa',
             till_number: TILL_NUMBER,
             subscriber: {
@@ -49,7 +49,11 @@ exports.stkPush = async (req, res) => {
             _links: {
                 callback_url: callbackUrl
             }
-        }, {
+        };
+
+        console.log('🚀 Sending to Kopo Kopo:', JSON.stringify({ ...paymentPayload, till_number: TILL_NUMBER }, null, 2));
+
+        const paymentResponse = await axios.post(`${BASE_URL}/api/v1/incoming_payments`, paymentPayload, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json',
