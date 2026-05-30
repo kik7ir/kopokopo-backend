@@ -19,26 +19,38 @@ exports.stkPush = async (req, res) => {
         });
         const accessToken = tokenResp.data.access_token;
 
-        // 2. Format Phone (must be 254...)
+        // 2. Format Phone (must be +254... for V2)
         let formattedPhone = phoneNumber.replace(/\D/g, '');
-        if (!formattedPhone.startsWith('254')) {
-            if (formattedPhone.startsWith('0')) formattedPhone = '254' + formattedPhone.slice(1);
-            else formattedPhone = '254' + formattedPhone;
-        }
+        if (formattedPhone.startsWith('0')) formattedPhone = '254' + formattedPhone.slice(1);
+        if (!formattedPhone.startsWith('254')) formattedPhone = '254' + formattedPhone;
+        formattedPhone = '+' + formattedPhone;
 
         const baseCallbackUrl = process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback';
         const callbackUrl = `${baseCallbackUrl}?orderId=${orderId}`;
 
-        // 3. Create Payment (Matches your example exactly)
+        // 3. Create Payment (Using the Official V2 structure)
         const paymentPayload = {
-            phone_number: formattedPhone,
-            currency: 'KES',
-            amount: amount,
-            description: `Order #${orderId} - ${firstName} ${lastName}`,
-            callback_url: callbackUrl
+            payment_channel: 'M-PESA STK Push',
+            till_number: TILL_NUMBER,
+            subscriber: {
+                first_name: firstName,
+                last_name: lastName,
+                phone_number: formattedPhone
+            },
+            amount: {
+                currency: 'KES',
+                value: amount
+            },
+            metadata: {
+                order_id: orderId,
+                notes: `Order #${orderId} - ${firstName} ${lastName}`
+            },
+            _links: {
+                callback_url: callbackUrl
+            }
         };
 
-        console.log('🚀 Sending to Kopo Kopo /payments:', JSON.stringify(paymentPayload, null, 2));
+        console.log('🚀 Sending to Kopo Kopo /api/v2/incoming_payments:', JSON.stringify(paymentPayload, null, 2));
 
         const headers = {
             'Authorization': `Bearer ${accessToken}`,
@@ -46,16 +58,16 @@ exports.stkPush = async (req, res) => {
             'Content-Type': 'application/json'
         };
 
-        // Add X-Api-Key if provided (Required by some Kopo Kopo versions)
+        // Add X-Api-Key if provided
         if (API_KEY) {
             headers['X-Api-Key'] = API_KEY;
         }
 
-        const response = await axios.post(`${BASE_URL}/payments`, paymentPayload, { headers });
+        const response = await axios.post(`${BASE_URL}/api/v2/incoming_payments`, paymentPayload, { headers });
 
         console.log('✅ Kopo Kopo Response:', response.data);
 
-        // Return response format expected by index.html
+        // Return a response compatible with the frontend logic in index.html
         res.json({
             ResponseCode: "0",
             CustomerMessage: "Payment request sent to phone.",
