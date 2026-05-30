@@ -35,7 +35,7 @@ async function getToken() {
     }
 }
 
-// STEP 2: STK Push Request
+// STEP 2: STK Push Request (Incoming Payment Request)
 exports.stkPush = async (req, res) => {
     const { phoneNumber, amount, orderId, firstName, lastName, email } = req.body;
 
@@ -56,7 +56,7 @@ exports.stkPush = async (req, res) => {
         const response = await axios.post(
             `${BASE_URL}/api/v2/incoming_payments`,
             {
-                payment_channel: "M-PESA STK Push",
+                payment_channel: "M-PESA",
                 till_number: TILL_NUMBER,
                 subscriber: {
                     first_name: firstName || "Customer",
@@ -69,7 +69,9 @@ exports.stkPush = async (req, res) => {
                     value: amount
                 },
                 metadata: {
-                    order_id: orderId
+                    order_id: orderId,
+                    customer_id: orderId,
+                    notes: `Payment for Order ${orderId}`
                 },
                 _links: {
                     callback_url: callbackUrl
@@ -90,6 +92,7 @@ exports.stkPush = async (req, res) => {
             ResponseCode: "0",
             message: "STK push initiated",
             CheckoutRequestID: response.headers.location || orderId,
+            location: response.headers.location,
             data: response.data
         });
 
@@ -104,7 +107,7 @@ exports.stkPush = async (req, res) => {
     }
 };
 
-// STEP 3: Handle Callback (STK Push Result)
+// STEP 3: Handle Callback (Process Incoming Payment Result)
 exports.handleCallback = async (req, res) => {
     const { orderId } = req.query;
     const payload = req.body;
@@ -112,17 +115,18 @@ exports.handleCallback = async (req, res) => {
     // Reliability: Check metadata if orderId is missing from query string
     const targetOrderId = orderId || payload.data?.attributes?.metadata?.order_id;
 
-    console.log(`\n🔔 Payment Callback: Order ${targetOrderId}`);
+    console.log(`\n🔔 Payment Callback Received: Order ${targetOrderId}`);
 
     try {
         if (!targetOrderId) throw new Error("Missing Order Reference");
 
         const orderUpdateUrl = `${DB_URL}/orders/${targetOrderId}.json`;
-        const status = payload.data?.attributes?.status;
+        const attributes = payload.data?.attributes;
+        const status = attributes?.status;
 
         if (status === 'Success') {
-            const resource = payload.data.attributes.event.resource;
-            const receipt = resource.reference || resource.system_generate_number;
+            const resource = attributes.event?.resource;
+            const receipt = resource?.reference || resource?.system_generate_number;
 
             console.log(`✅ PAID: Order ${targetOrderId} | Receipt: ${receipt}`);
 
@@ -132,10 +136,17 @@ exports.handleCallback = async (req, res) => {
                 paidAt: new Date().toISOString()
             });
         } else {
-            console.log(`❌ FAILED: Order ${targetOrderId} | Reason: ${status}`);
+            // Official V2 Failure Handling: Use the errors array from the example provided
+            const errors = attributes?.event?.errors;
+            const failureReason = (errors && Array.isArray(errors) && errors.length > 0)
+                ? errors.join(', ')
+                : (attributes?.result_description || 'Transaction unsuccessful');
+
+            console.log(`❌ FAILED: Order ${targetOrderId} | Reason: ${failureReason}`);
+
             await axios.patch(orderUpdateUrl, {
                 status: 'Failed',
-                failureReason: payload.data?.attributes?.result_description || 'Transaction unsuccessful'
+                failureReason: failureReason
             });
         }
     } catch (error) {
@@ -166,4 +177,48 @@ exports.webhook = async (req, res) => {
     }
 
     res.sendStatus(200);
+};
+
+// STEP 5: Webhook Subscription (Trial/Setup)
+exports.subscribeWebhooks = async (req, res) => {
+    try {
+        const token = await getToken();
+
+        const request_body = {
+            event_type: req.body.event_type || "buygoods_transaction_received",
+            url: req.body.url || 'https://kopokopo-backend.onrender.com/api/webhook',
+            scope: req.body.scope || "till",
+            scope_reference: req.body.scope_reference || TILL_NUMBER,
+            enable_daraja_payload: req.body.enable_daraja_payload || false
+        };
+
+        console.log(`📡 Registering Webhook Subscription: ${request_body.event_type}`);
+
+        const response = await axios.post(
+            `${BASE_URL}/api/v2/webhook_subscriptions`,
+            request_body,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        res.json({
+            success: true,
+            message: "Webhook subscription initiated",
+            location: response.headers.location,
+            data: response.data
+        });
+    } catch (err) {
+        const errorData = err.response ? err.response.data : err.message;
+        console.error('❌ Webhook Subscription Failed:', JSON.stringify(errorData, null, 2));
+        res.status(500).json({
+            success: false,
+            error: 'Webhook subscription failed',
+            details: errorData
+        });
+    }
 };
