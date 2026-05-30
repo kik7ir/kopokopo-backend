@@ -1,26 +1,30 @@
 const axios = require('axios');
 
 /**
- * KOPO KOPO V2 INTEGRATION - MODISH MIX STORE
- *
- * CRITICAL RULES COMPLIANCE:
- * ✔ Always use HTTPS: Enforced via BASE_URL and Render endpoint.
- * ✔ Always use backend: Sensitive credentials (ID/Secret) are never exposed to the frontend.
- * ✔ OAuth2 Token: A fresh token is requested for every STK Push transaction.
- * ✔ Callback URL: Mandatory callback is included in every STK Push payload for status updates.
+ * KOPOKOPO V2 FIXED INTEGRATION
+ * FIXES:
+ * ✔ Till number validation issue
+ * ✔ Wrong payment_channel
+ * ✔ Unsafe fallback values
+ * ✔ Better debugging for Render
  */
 
-// Configuration
+// ================= CONFIG =================
 const BASE_URL = process.env.KOPOKOPO_BASE_URL || 'https://api.kopokopo.com';
-const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || 'NLWEWv831tup-WOMWOcDgpiIOSwJ4jV1s_U6unHEwfg';
-const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || 'ITzJF5mdKR94qGleGgurJjroK5KdF7IWbMBefLtFunw';
 
-// Rule: Till number can be "1234567" or "K000000" (per official V2 spec)
-const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || '3309609';
+const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID;
+const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET;
+
+// 🚨 IMPORTANT: NO fallback value (this caused your bug)
+const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER;
 const DB_URL = process.env.FIREBASE_DB_URL || "https://school-system-a97a4-default-rtdb.firebaseio.com";
 
-// STEP 1: Get Access Token (Helper)
-// Rule: Use OAuth token for every request
+// ================= SAFETY CHECK =================
+if (!TILL_NUMBER) {
+    console.error("❌ KOPOKOPO_TILL_NUMBER is missing in environment variables");
+}
+
+// ================= GET TOKEN =================
 async function getToken() {
     try {
         const res = await axios.post(`${BASE_URL}/oauth/token`, {
@@ -28,51 +32,69 @@ async function getToken() {
             client_id: CLIENT_ID,
             client_secret: CLIENT_SECRET
         });
+
         return res.data.access_token;
     } catch (err) {
-        console.error("❌ Kopo Kopo Auth Failed:", err.response?.data || err.message);
-        throw new Error("Authentication failed with payment gateway.");
+        console.error("❌ Auth Failed:", err.response?.data || err.message);
+        throw new Error("KopoKopo authentication failed");
     }
 }
 
-// STEP 2: STK Push Request (Incoming Payment Request)
+// ================= STK PUSH =================
 exports.stkPush = async (req, res) => {
     const { phoneNumber, amount, orderId, firstName, lastName, email } = req.body;
 
     try {
         const token = await getToken();
 
-        // Phone Normalization: Kopo Kopo V2 requires E.164 (+254...)
+        // ================= PHONE FORMAT FIX =================
         let phone = phoneNumber.replace(/\D/g, '');
         if (phone.startsWith('0')) phone = '254' + phone.slice(1);
         if (!phone.startsWith('254')) phone = '254' + phone;
         phone = '+' + phone;
 
-        // Rule: Must include callback URL
+        // ================= CALLBACK =================
         const callbackUrl = `${process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback'}?orderId=${orderId}`;
 
-        console.log(`🚀 Initiating STK Push: Order ${orderId} | Phone ${phone}`);
+        // ================= DEBUG LOGS =================
+        console.log("🚀 STK PUSH INITIATED");
+        console.log("📦 Order:", orderId);
+        console.log("📱 Phone:", phone);
+        console.log("🏦 Till:", TILL_NUMBER);
 
+        // ================= VALIDATION =================
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ error: "Invalid amount" });
+        }
+
+        if (!TILL_NUMBER) {
+            return res.status(500).json({ error: "Missing till number in server config" });
+        }
+
+        // ================= KOPOKOPO REQUEST =================
         const response = await axios.post(
             `${BASE_URL}/api/v2/incoming_payments`,
             {
-                payment_channel: "M-PESA",
+                payment_channel: "M-PESA STK Push", // ✅ FIXED (VERY IMPORTANT)
                 till_number: TILL_NUMBER,
+
                 subscriber: {
                     first_name: firstName || "Customer",
                     last_name: lastName || "User",
                     phone_number: phone,
                     email: email || "customer@example.com"
                 },
+
                 amount: {
                     currency: "KES",
-                    value: amount
+                    value: Number(amount)
                 },
+
                 metadata: {
                     order_id: orderId,
-                    customer_id: orderId,
-                    notes: `Payment for Order ${orderId}`
+                    notes: "Payment via STK Push"
                 },
+
                 _links: {
                     callback_url: callbackUrl
                 }
@@ -86,33 +108,30 @@ exports.stkPush = async (req, res) => {
             }
         );
 
-        // Success response compatible with index.html (checks for ResponseCode: "0")
+        // ================= SUCCESS =================
         res.json({
             success: true,
-            ResponseCode: "0",
-            message: "STK push initiated",
+            ResponseCode: "0", // Compatible with index.html
+            message: "STK push sent successfully",
             CheckoutRequestID: response.headers.location || orderId,
-            location: response.headers.location,
             data: response.data
         });
 
     } catch (err) {
-        const errorData = err.response ? err.response.data : err.message;
-        console.error('❌ STK Push Failed:', JSON.stringify(errorData, null, 2));
+        console.error("❌ STK PUSH ERROR:", err.response?.data || err.message);
+
         res.status(500).json({
             success: false,
-            error: 'Payment processing failed',
-            details: errorData
+            error: "Payment failed",
+            details: err.response?.data || err.message
         });
     }
 };
 
-// STEP 3: Handle Callback (Process Incoming Payment Result)
+// ================= CALLBACK HANDLER =================
 exports.handleCallback = async (req, res) => {
     const { orderId } = req.query;
     const payload = req.body;
-
-    // Reliability: Check metadata if orderId is missing from query string
     const targetOrderId = orderId || payload.data?.attributes?.metadata?.order_id;
 
     console.log(`\n🔔 Payment Callback Received: Order ${targetOrderId}`);
@@ -136,7 +155,6 @@ exports.handleCallback = async (req, res) => {
                 paidAt: new Date().toISOString()
             });
         } else {
-            // Official V2 Failure Handling: Use the errors array from the example provided
             const errors = attributes?.event?.errors;
             const failureReason = (errors && Array.isArray(errors) && errors.length > 0)
                 ? errors.join(', ')
@@ -153,10 +171,10 @@ exports.handleCallback = async (req, res) => {
         console.error('❌ Callback Processing Error:', error.message);
     }
 
-    res.sendStatus(200); // Always acknowledge the callback to Kopo Kopo
+    res.sendStatus(200);
 };
 
-// STEP 4: Webhook Handler (Buy Goods/Account Events)
+// ================= WEBHOOK HANDLER =================
 exports.webhook = async (req, res) => {
     console.log("🔔 Webhook Received:", JSON.stringify(req.body, null, 2));
 
@@ -175,11 +193,10 @@ exports.webhook = async (req, res) => {
     } catch (error) {
         console.error('❌ Webhook Error:', error.message);
     }
-
     res.sendStatus(200);
 };
 
-// STEP 5: Webhook Subscription (Trial/Setup)
+// ================= WEBHOOK SUBSCRIPTION =================
 exports.subscribeWebhooks = async (req, res) => {
     try {
         const token = await getToken();
@@ -191,8 +208,6 @@ exports.subscribeWebhooks = async (req, res) => {
             scope_reference: req.body.scope_reference || TILL_NUMBER,
             enable_daraja_payload: req.body.enable_daraja_payload || false
         };
-
-        console.log(`📡 Registering Webhook Subscription: ${request_body.event_type}`);
 
         const response = await axios.post(
             `${BASE_URL}/api/v2/webhook_subscriptions`,
@@ -206,19 +221,8 @@ exports.subscribeWebhooks = async (req, res) => {
             }
         );
 
-        res.json({
-            success: true,
-            message: "Webhook subscription initiated",
-            location: response.headers.location,
-            data: response.data
-        });
+        res.json({ success: true, data: response.data });
     } catch (err) {
-        const errorData = err.response ? err.response.data : err.message;
-        console.error('❌ Webhook Subscription Failed:', JSON.stringify(errorData, null, 2));
-        res.status(500).json({
-            success: false,
-            error: 'Webhook subscription failed',
-            details: errorData
-        });
+        res.status(500).json({ success: false, error: err.message });
     }
 };
