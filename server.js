@@ -16,8 +16,8 @@ app.get('/health', (req, res) => {
     res.json({ status: 'OK', message: 'Kopo Kopo Backend is running' });
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-    console.log(`🚀 Kopo Kopo Backend running on: http://localhost:${PORT}`);
-    console.log(`⚠️ Make sure your .env file is configured.`);
+    console.log(`🚀 Kopo Kopo Backend running on port ${PORT}`);
 });
