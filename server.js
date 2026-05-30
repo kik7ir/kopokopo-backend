@@ -12,6 +12,10 @@ app.use(bodyParser.json());
 // Routes
 app.use('/api', kopokopoRoutes);
 
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', message: 'Kopo Kopo Backend is running' });
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
     console.log(`🚀 Kopo Kopo Backend running on: http://localhost:${PORT}`);
