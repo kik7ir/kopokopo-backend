@@ -69,7 +69,9 @@ router.post('/stk/push', async (req, res) => {
         let errorMessage = 'Failed to initiate STK push';
 
         // Extract detailed error from K2 SDK or Axios response
-        if (error.response) {
+        if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error.response) {
             console.error('Kopo Kopo Response Error:', error.response.data);
             errorMessage = error.response.data.error_description || error.response.data.error || errorMessage;
         } else if (error.message) {
@@ -77,7 +79,7 @@ router.post('/stk/push', async (req, res) => {
         }
 
         // Specifically check for 401/Unauthorized
-        if (errorMessage.toLowerCase().includes('unauthorized')) {
+        if (errorMessage && errorMessage.toString().toLowerCase().includes('unauthorized')) {
             errorMessage = "Kopo Kopo Authentication Failed: Check Client ID and Secret in Render Env Variables.";
         }
 
