@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: tokens.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: tokens.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>'use strict'
+const axios = require('axios')
+const dispatch = require('./helpers/dispatch')
+const tokenValidate = require('./validate/token').tokenValidate
+
+/**
+ * Handles oauth2 operations
+ * @module TokenService
+ * @constructor
+ * @param {object} options
+ * @param {string} options.clientId
+ * @param {string} options.clientSecret
+ * @param {string} options.baseUrl
+*/
+function TokenService(options) {
+	this.options = options
+	var clientSecret = this.options.clientSecret
+	var clientId = this.options.clientId
+	var baseUrl = this.options.baseUrl
+
+	/**
+	 * Handles requests for authorizing an oauth application
+	 * @function getToken
+	 * @memberof TokenService
+	 * @requires axios.post
+	 * @returns {Promise} Promise object having the token_type, access_token and expires_in
+	*/
+	this.getToken = function () {
+		var requestBody = {
+			client_id: clientId,
+			client_secret: clientSecret,
+			grant_type: 'client_credentials'
+		}
+
+		return axios.post(`${baseUrl}/oauth/token`, requestBody, {
+			headers: {
+				'Accept': 'application/json',
+				'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Kopokopo-Node-SDK'
+			}
+		})
+		.then(response => response.data)
+		.catch(error => {
+			if (error.response) {
+				if (error.response.status === 401) {
+					throw 'Unauthorized'
+				} else if (error.response.status === 500) {
+					throw error.response.data || error.response.status
+				} else {
+					throw error.response.data || error.response.status
+				}
+			} else if (error.request) {
+				throw 'No response received'
+			} else {
+				throw error.message
+			}
+		})
+	}
+
+	/**
+	 * Handles requests for revoking an access token
+	 * @function revokeToken
+	 * @memberof TokenService
+	 * @param {object} opts
+	 * @param {string} opts.accessToken - The access token to be revoked.
+	 * @returns {Promise} Promise object returning empty body
+	*/
+	this.revokeToken = function (opts) {
+		return new Promise(function (resolve, reject) {
+			let validationError = tokenValidate(opts)
+
+			if (validationError) {
+				reject(validationError)
+			}
+
+			var requestBody = {
+				client_id: clientId,
+				client_secret: clientSecret,
+				token: opts.accessToken
+			}
+
+			dispatch.sendRequest(requestBody, baseUrl + '/oauth/revoke', null)
+			.then((response) => {
+				resolve(response.body)
+			})
+			.catch((error) => {
+				reject(error)
+			})
+		})
+	}
+
+	/**
+	 * Handles requests for introspecting an access token
+	 * @function introspectToken
+	 * @memberof TokenService
+	 * @param {object} opts
+	 * @param {string} opts.accessToken - The access token to be revoked.
+	 * @returns {Promise} Promise object having the token_type, client_id, scope, active, exp(expiry time), iat(created time)
+	*/
+	this.introspectToken = function (opts) {
+		return new Promise(function (resolve, reject) {
+			let validationError = tokenValidate(opts)
+
+			if (validationError) {
+				reject(validationError)
+			}
+
+			var requestBody = {
+				client_id: clientId,
+				client_secret: clientSecret,
+				token: opts.accessToken
+			}
+
+			dispatch.sendRequest(requestBody, baseUrl + '/oauth/introspect', null)
+			.then((response) => {
+				resolve(response.body)
+			})
+			.catch((error) => {
+				reject(error)
+			})
+		})
+	}
+
+	/**
+	 * Handles requests for getting information on the token
+	 * @function infoToken
+	 * @memberof TokenService
+	 * @param {object} opts
+	 * @param {string} opts.accessToken - The access token to be revoked.
+	 * @returns {Promise} Promise object having the scope, expires_in, application.uid, created_at
+	*/
+	this.infoToken = function (opts) {
+		return new Promise(function (resolve, reject) {
+			let validationError = tokenValidate(opts)
+
+			if (validationError) {
+				reject(validationError)
+			}
+
+			dispatch.getContent(baseUrl + '/oauth/token/info', opts.accessToken)
+            .then((response) => {
+                resolve(response)
+            })
+            .catch((error) => {
+                reject(error)
+			})
+		})
+	}
+}
+
+module.exports = {
+	TokenService
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="ExternalRecipientService.html">ExternalRecipientService</a></li><li><a href="K2.html">K2</a></li><li><a href="PaymentLinkService.html">PaymentLinkService</a></li><li><a href="PollingService.html">PollingService</a></li><li><a href="ReversalService.html">ReversalService</a></li><li><a href="SendMoneyService.html">SendMoneyService</a></li><li><a href="StkService.html">StkService</a></li><li><a href="TokenService.html">TokenService</a></li><li><a href="TransferService.html">TransferService</a></li><li><a href="Webhooks.html">Webhooks</a></li></ul><h3>Global</h3><ul><li><a href="global.html#getStatus">getStatus</a></li><li><a href="global.html#initiateReversal">initiateReversal</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Apr 29 2026 19:15:24 GMT+0300 (East Africa Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

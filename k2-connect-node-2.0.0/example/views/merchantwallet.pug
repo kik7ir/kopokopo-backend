@@ -1,0 +1,38 @@
+extends layout
+
+block content
+
+    br
+
+    p !{message}
+    .container
+        .title.h3 Create Merchant Mobile Wallet
+        br
+        form(action="/transfer/createmerchantwallet", method="post")
+            .form-group.row
+                label.col-sm-2.col-form-label First Name
+                .col-sm-7
+                    input.form-control(name="firstName", type='text', placeholder='Enter First Name' required)
+                    small.form-text.text-muted
+                        | First Name  
+            .form-group.row
+                label.col-sm-2.col-form-label Last Name
+                .col-sm-7
+                    input.form-control(name="lastName", type='text', placeholder='Enter Last Name' required)
+                    small.form-text.text-muted
+                        | Last Name    
+            .form-group.row
+                label.col-sm-2.col-form-label(for="network") Network
+                .col-sm-7
+                    select(name = "network")
+                        option(value="Safaricom") Safaricom
+            .form-group.row
+                label.col-sm-2.col-form-label Phone Number
+                .col-sm-7
+                    input.form-control(name="phoneNumber", type='text', placeholder='Enter Phone Number' required)
+                    small.form-text.text-muted
+                        | Phone Number    
+            br
+            .form-group.row
+                .col-sm-7
+                    button.btn.btn-success(type='submit') Create Settlement Account
