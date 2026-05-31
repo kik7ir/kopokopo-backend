@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /googlefav.png
+Allow: /favicon.png
+
+Sitemap: https://modishmixstore.web.app/sitemap.xml
