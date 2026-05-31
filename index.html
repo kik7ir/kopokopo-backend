@@ -3127,9 +3127,12 @@ It's currently out of stock. Please notify me once you restock this item! 😊`;
                     }
 
                     const result = await response.json();
+                    console.log('Server Response:', result);
 
                     if (!response.ok) {
-                        throw new Error(result.error || 'Failed to initiate STK push');
+                        // Log the specific error from the backend
+                        const backendError = result.error || result.message || 'Unknown Server Error';
+                        throw new Error(backendError);
                     }
 
                     console.log('STK Response:', result);
