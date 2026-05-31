@@ -19,31 +19,38 @@ router.post('/stk/push', async (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Format phone number to E.164 (Kopo Kopo often prefers 254... without the +)
-    let formattedPhone = phoneNumber.replace(/\s+/g, '').replace(/\+/g, '');
+    // Format phone number to E.164 (Kopo Kopo SDK usually expects +254...)
+    let formattedPhone = phoneNumber.replace(/\s+/g, '');
     if (formattedPhone.startsWith('0')) {
-        formattedPhone = '254' + formattedPhone.substring(1);
+        formattedPhone = '+254' + formattedPhone.substring(1);
     } else if (formattedPhone.startsWith('254')) {
-        // Already in correct format
-    } else {
-        // Fallback for other formats
-        formattedPhone = '254' + formattedPhone;
+        formattedPhone = '+' + formattedPhone;
+    } else if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
     }
 
     try {
+        if (!process.env.KOPOKOPO_TILL_NUMBER || !process.env.CALLBACK_URL) {
+            throw new Error('Backend Configuration Error: Missing TILL_NUMBER or CALLBACK_URL on Render');
+        }
+
         console.log(`Initiating STK Push for ${formattedPhone}, Amount: ${amount}, Order: ${orderId}`);
 
         const tokenResponse = await TokenService.getToken();
         const accessToken = tokenResponse.access_token;
 
+        if (!accessToken) {
+            throw new Error('Failed to obtain access token from Kopo Kopo. Check your Client ID and Secret.');
+        }
+
         const stkOptions = {
-            tillNumber: process.env.KOPOKOPO_TILL_NUMBER,
+            tillNumber: process.env.KOPOKOPO_TILL_NUMBER.trim(),
             firstName: firstName || 'Customer',
             lastName: lastName || 'User',
             phoneNumber: formattedPhone,
-            amount: amount,
+            amount: amount.toString(), // Ensure amount is a string
             currency: 'KES',
-            callbackUrl: process.env.CALLBACK_URL,
+            callbackUrl: process.env.CALLBACK_URL.trim(),
             accessToken: accessToken,
             metadata: {
                 orderId: orderId
@@ -56,11 +63,14 @@ router.post('/stk/push', async (req, res) => {
     } catch (error) {
         console.error('STK Error Detailed:', error);
 
-        // Extract more detailed error message if available from K2 SDK
         let errorMessage = 'Failed to initiate STK push';
+
+        // Check for K2 SDK specific error responses
         if (error.response && error.response.data) {
-            console.error('K2 Error Data:', error.response.data);
-            errorMessage = error.response.data.error || error.response.data.message || errorMessage;
+            console.error('K2 Error Data:', JSON.stringify(error.response.data));
+            errorMessage = error.response.data.error_description ||
+                           error.response.data.error ||
+                           JSON.stringify(error.response.data);
         } else if (error.message) {
             errorMessage = error.message;
         }
