@@ -554,7 +554,7 @@ img{
                     <input type="radio" name="paymentMethod" value="Lipa na M-PESA" checked onclick="togglePaymentView('mpesa')">
                     <div class="payment-method-text">
                         <h4>Lipa na M-PESA <img loading="lazy" decoding="async" src="mpesa%20icone.png" class="mpesa-logo-inline" alt="M-Pesa"></h4>
-                        <p>Instant STK Push validation prompt will switch onto your active Safaricom device interface panel.</p>
+                        <p>Pay manually via our Buy Goods Till Number (3309609). Instructions shown after placing order.</p>
                     </div>
                 </label>
                 <label class="payment-method-option">
@@ -568,7 +568,7 @@ img{
                 <div id="manualTillInfo" style="background: rgba(37, 211, 102, 0.1); border: 1px dashed var(--whatsapp-green); border-radius: 6px; padding: 1rem; margin: 15px 0; text-align: center;">
                     <h4 style="color: var(--whatsapp-green); font-size: 0.9rem; margin-bottom: 5px;"><i class="fa-solid fa-mobile-screen-button"></i> M-PESA BUY GOODS (Till Fallback)</h4>
                     <p style="font-size: 1.1rem; font-weight: bold; color: white;">Till: <span id="tillNumber" style="color: var(--gold);">3309609</span> <button type="button" class="copy-btn" onclick="copyTill()"><i class="fa-solid fa-copy"></i> COPY</button></p>
-                    <p style="font-size: 0.75rem; opacity: 0.8; color: white;">If the prompt doesn't appear, use this Till Number manually.</p>
+                    <p style="font-size: 0.75rem; opacity: 0.8; color: white;">Use this Till Number to complete your payment.</p>
                 </div>
 
                 <button type="submit" class="place-order-submit-btn" id="submitOrderBtn">
@@ -920,6 +920,7 @@ img{
 // Optimized lightweight homepage loading enabled
 // Use Firestore basic product docs + lazy product details fetching
         import { getDatabase, ref, onValue, update, increment, push, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDeuy7YfMZ-FXM4-SrIKFO3IKpyB0OEJVA",
@@ -935,6 +936,7 @@ img{
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
+        const functions = getFunctions(app);
         const provider = new GoogleAuthProvider();
 
         const sideDrawer = document.getElementById('sideDrawer');
@@ -3092,128 +3094,68 @@ It's currently out of stock. Please notify me once you restock this item! 😊`;
 
             if (selectedPayment === "Lipa na M-PESA") {
                 mpesaLoader.classList.add('active');
-                document.getElementById('loaderTitle').innerText = "Sending M-PESA STK Push...";
-                document.getElementById('loaderMessage').innerText = `Requesting KSh ${totalBillAmount.toLocaleString()} authorization on handset phone number: ${customerPhone}.`;
-
-                // --- IMPROVED PHONE FORMATTING (254...) ---
-                let cleanPhone = customerPhone.replace(/\D/g, '');
-                if (cleanPhone.startsWith('0')) {
-                    cleanPhone = '254' + cleanPhone.slice(1);
-                } else if (cleanPhone.startsWith('7') || cleanPhone.startsWith('1')) {
-                    cleanPhone = '254' + cleanPhone;
-                } else if (cleanPhone.startsWith('+')) {
-                    cleanPhone = cleanPhone.slice(1);
-                }
+                document.getElementById('loaderTitle').innerText = "Initiating M-PESA STK Push...";
+                document.getElementById('loaderMessage').innerHTML = `
+                    <p style="color: #e0e0e0; margin-bottom: 20px;">Please check your phone for the M-PESA prompt to authorize payment of <b>KSh ${totalBillAmount.toLocaleString()}</b>.</p>
+                    <div class="spinner-ring" style="margin: 20px auto;"></div>
+                    <p style="font-size: 0.8rem; color: #a0a0b8;">Waiting for payment confirmation...</p>
+                `;
 
                 try {
-                    // STRICT: Using Render Backend for all Sandbox/Production payments
-                    const RENDER_BACKEND_URL = 'https://kopokopo-backend.onrender.com';
-                    const backendUrl = `${RENDER_BACKEND_URL}/api/stkpush`;
-
-                    console.log(`🚀 Sending STK Push request to Render: ${backendUrl} for ${cleanPhone}`);
-
-                    const response = await fetch(backendUrl, {
+                    // Refactored to use Render backend instead of Firebase Functions
+                    const response = await fetch('https://kopokopo-backend.onrender.com/api/stk/push', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify({
-                            phoneNumber: cleanPhone,
+                            phoneNumber: customerPhone,
                             amount: totalBillAmount,
                             orderId: orderId,
                             firstName: firstName,
-                            lastName: lastName,
-                            email: orderData.email
+                            lastName: lastName
                         })
                     });
 
+                    const result = await response.json();
+
                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        let errorMsg = 'Server Error';
-                        if (errorData.details && errorData.details.error_message) {
-                            errorMsg = errorData.details.error_message;
-                        } else if (errorData.error) {
-                            errorMsg = errorData.error;
-                        }
-                        throw new Error(`Payment Failed: ${errorMsg}`);
+                        throw new Error(result.error || 'Failed to initiate STK push');
                     }
 
-                    const data = await response.json();
+                    console.log('STK Response:', result);
 
-                    if (response.ok && data.ResponseCode === "0") {
-                        // Store CheckoutRequestID for tracking
-                        await update(ref(db, `orders/${orderId}`), {
-                            checkoutRequestID: data.CheckoutRequestID,
-                            merchantRequestID: data.MerchantRequestID
-                        });
+                    // Clear cart locally since order is placed
+                    cart = [];
+                    updateCartBadges();
+                    localStorage.removeItem('mms_cart');
 
-                        cart = [];
-                        updateCartBadges();
-
-                        document.getElementById('loaderTitle').innerText = "✓ Push Sent!";
-                        document.getElementById('loaderMessage').innerHTML = `Check your phone screen for the Safaricom PIN window prompt to authorize KSh ${totalBillAmount.toLocaleString()}.<br><br>
-                        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin: 10px 0;">
-                            <small style="color: #a0a0b8;">Order ID:</small><br>
-                            <strong style="color: var(--gold); font-family: monospace;">${orderId}</strong>
-                        </div>
-                        <div class="spinner-ring" style="width:30px; height:30px; margin: 10px auto; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--gold); border-radius: 50%; animation: spin 1s linear infinite;"></div><p style="font-size:0.8rem; margin-top:10px;">Waiting for payment confirmation...</p>`;
-
-                        // Start listening for status change
-                        const orderStatusRef = ref(db, `orders/${orderId}/status`);
-                        const unsubscribe = onValue(orderStatusRef, (snapshot) => {
-                            const status = snapshot.val();
-                            const successStatuses = ['preparing your order', 'shipping', 'in transit', 'arrived', 'delivered', 'signed', 'completed'];
-                            if (status && successStatuses.includes(status.toLowerCase())) {
-                                document.getElementById('loaderTitle').innerText = "✅ Payment Successful!";
-                                document.getElementById('loaderMessage').innerHTML = `Your order has been confirmed. Thank you for shopping with us!<br><br>
-                                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-                                    <button onclick="window.location.reload()" style="background:#2ecc71; color:white; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Return to Store</button>
-                                    <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:var(--gold); color:black; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Track Order</button>
-                                </div>`;
-                                unsubscribe();
-                            } else if (status === 'Failed') {
-                                document.getElementById('loaderTitle').innerText = "❌ Payment Failed";
-                                document.getElementById('loaderMessage').innerHTML = `Transaction was not successful. Please try again or use the manual Till.<br><br><button onclick="window.location.reload()" style="background:var(--accent-red); color:white; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; margin-top:10px; cursor:pointer; text-transform:uppercase;">Try Again</button>`;
-                                unsubscribe();
-                            }
-                        });
-
-                        // Timeout listener after 2 minutes
-                        setTimeout(() => unsubscribe(), 120000);
-                    } else {
-                        throw new Error(data.CustomerMessage || data.message || "Failed to trigger push");
-                    }
-
-                } catch (error) {
-                    console.error("Payment Error:", error);
-                    document.getElementById('loaderTitle').innerText = "⚠️ Payment Processing";
-                    const displayTill = window.currentTillNumber || "3309609";
-                    document.getElementById('loaderMessage').innerHTML = `We couldn't trigger the automated prompt, but your order is saved!<br>
-                    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin: 10px 0;">
-                        <small style="color: #a0a0b8;">Order ID:</small> <strong style="color: var(--gold); font-family: monospace;">${orderId}</strong>
-                    </div>
-                    Please pay KSh ${totalBillAmount.toLocaleString()} to Till: <b>${displayTill}</b> manually.<br><br>
-                    <p id="manualStatusSub" style="font-size: 0.75rem; color: #a0a0b8; margin-bottom: 10px;">Waiting for admin to confirm payment...</p>
-                    <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
-                        <button onclick="signalManualPayment('${orderId}')" style="background:var(--gold); color:black; border:none; padding:12px 24px; border-radius:4px; font-weight:800; cursor:pointer; text-transform:uppercase; letter-spacing:1px; width: 100%; max-width: 250px;">I have paid manually</button>
-                        <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:transparent; color:var(--gold); border: 1px solid var(--gold); padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Track My Order</button>
-                    </div>`;
-
-                    // Listen for status even in manual mode (if admin updates it)
-                    const manualStatusRef = ref(db, `orders/${orderId}/status`);
-                    const unsubManual = onValue(manualStatusRef, (snapshot) => {
+                    // Listen for status change in real-time
+                    const orderStatusRef = ref(db, `orders/${orderId}/status`);
+                    onValue(orderStatusRef, (snapshot) => {
                         const status = snapshot.val();
-                        const successStatuses = ['preparing your order', 'shipping', 'in transit', 'arrived', 'delivered', 'signed', 'completed'];
-                        if (status && successStatuses.includes(status.toLowerCase())) {
+                        if (status && status.toLowerCase() === 'processing') {
                             document.getElementById('loaderTitle').innerText = "✅ Payment Confirmed!";
-                            document.getElementById('loaderMessage').innerHTML = `Admin has confirmed your payment. Thank you!<br><br>
-                            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-                                <button onclick="window.location.reload()" style="background:#2ecc71; color:white; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Return to Store</button>
-                                <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:var(--gold); color:black; border:none; padding:10px 20px; border-radius:4px; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size: 0.8rem;">Track Order</button>
-                            </div>`;
-                            unsubManual();
+                            document.getElementById('loaderMessage').innerHTML = `
+                                <p style="color: #e0e0e0; margin-bottom: 20px;">We have received your payment for order <b>${orderId}</b>. Your package is being prepared!</p>
+                                <div style="display: flex; gap: 10px; justify-content: center;">
+                                    <button onclick="window.location.reload()" style="background:#2ecc71; color:white; border:none; padding:12px 20px; border-radius:6px; font-weight:bold; cursor:pointer; text-transform:uppercase;">Return to Shop</button>
+                                    <button onclick="mpesaLoader.classList.remove('active'); openTrackingPage();" style="background:var(--gold); color:black; border:none; padding:12px 20px; border-radius:6px; font-weight:bold; cursor:pointer; text-transform:uppercase;">Track Order</button>
+                                </div>`;
                         }
                     });
-                }
 
+                } catch (error) {
+                    console.error('STK Push failed:', error);
+                    document.getElementById('loaderTitle').innerText = "STK Push Failed";
+                    document.getElementById('loaderMessage').innerHTML = `
+                        <p style="color: #ff4757; margin-bottom: 20px;">Error: ${error.message || 'Could not initiate payment'}</p>
+                        <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                            <button onclick="mpesaLoader.classList.remove('active')" style="background:var(--gold); color:black; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; text-transform:uppercase;">Try Again</button>
+                            <button onclick="signalManualPayment('${orderId}')" style="background:#3498db; color:white; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; text-transform:uppercase;">Pay Manually Instead</button>
+                        </div>
+                    `;
+                }
             } else {
                 const whatsappMsg = `🛒 *NEW ORDER (CASH ON DELIVERY)* \n\n` +
                                      `⚠️ *Note:* Restricted to Eldoret Town Delivery Only\n\n` +
