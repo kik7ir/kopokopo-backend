@@ -1,129 +1,66 @@
-const axios = require('axios');
+const K2 = require("k2-connect-node")({
+    clientId: process.env.KOPOKOPO_CLIENT_ID,
+    clientSecret: process.env.KOPOKOPO_CLIENT_SECRET,
+    apiKey: process.env.KOPOKOPO_API_KEY,
+    baseUrl: process.env.KOPOKOPO_BASE_URL || 'https://sandbox.kopokopo.com'
+});
 
-/**
- * KOPOKOPO V2 FIXED INTEGRATION
- * FIXES:
- * ✔ Till number validation issue
- * ✔ Wrong payment_channel
- * ✔ Unsafe fallback values
- * ✔ Better debugging for Render
- */
-
-// ================= CONFIG =================
-// Hardcoding Sandbox values for testing to ensure they work on Render
-const BASE_URL = process.env.KOPOKOPO_BASE_URL || 'https://sandbox.kopokopo.com';
-const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || 'K000000'; // Fallback to Sandbox Till
-const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID;
-const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET;
+const TokenService = K2.TokenService;
+const StkService = K2.StkService;
 const DB_URL = "https://school-system-a97a4-default-rtdb.firebaseio.com";
-
-// ================= SAFETY CHECK =================
-if (!CLIENT_ID || !CLIENT_SECRET) {
-    console.error("❌ CRITICAL: KOPOKOPO_CLIENT_ID or CLIENT_SECRET is missing in environment variables!");
-}
-
-// ================= GET TOKEN =================
-async function getToken() {
-    try {
-        console.log(`🔑 Requesting token from: ${BASE_URL}/oauth/token`);
-        const res = await axios.post(`${BASE_URL}/oauth/token`, {
-            grant_type: "client_credentials",
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET
-        });
-
-        return res.data.access_token;
-    } catch (err) {
-        const errDetail = err.response?.data || err.message;
-        console.error("❌ Auth Failed:", errDetail);
-        throw new Error(`KopoKopo authentication failed: ${JSON.stringify(errDetail)}`);
-    }
-}
+const axios = require('axios');
 
 // ================= STK PUSH =================
 exports.stkPush = async (req, res) => {
     const { phoneNumber, amount, orderId, firstName, lastName, email } = req.body;
 
     try {
-        const token = await getToken();
+        console.log(`🚀 K2 SDK: Initiating payment for ${orderId}`);
 
-        // ================= PHONE FORMAT FIX =================
+        // 1. Get Token using SDK
+        const tokenResponse = await TokenService.getToken();
+        const accessToken = tokenResponse.access_token;
+
+        // 2. Format Phone (SDK expects +254...)
         let phone = phoneNumber.replace(/\D/g, '');
         if (phone.startsWith('0')) phone = '254' + phone.slice(1);
         if (!phone.startsWith('254')) phone = '254' + phone;
         phone = '+' + phone;
 
-        // ================= CALLBACK =================
-        const callbackUrl = `${process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback'}?orderId=${orderId}`;
-
-        // ================= DEBUG LOGS =================
-        console.log("🚀 STK PUSH INITIATED");
-        console.log("📦 Order:", orderId);
-        console.log("📱 Phone:", phone);
-        console.log("🏦 Till:", TILL_NUMBER);
-
-        // ================= VALIDATION =================
-        if (!amount || amount <= 0) {
-            return res.status(400).json({ error: "Invalid amount" });
-        }
-
-        if (!TILL_NUMBER) {
-            return res.status(500).json({ error: "Missing till number in server config" });
-        }
-
-        // ================= KOPOKOPO REQUEST =================
-        const response = await axios.post(
-            `${BASE_URL}/api/v2/incoming_payments`,
-            {
-                payment_channel: "m-pesa", // ✅ Matches V2 API and Firebase function
-                till_number: TILL_NUMBER,
-
-                subscriber: {
-                    first_name: firstName || "Customer",
-                    last_name: lastName || "User",
-                    phone_number: phone,
-                    email: email || "customer@example.com"
-                },
-
-                amount: {
-                    currency: "KES",
-                    value: Number(amount)
-                },
-
-                metadata: {
-                    order_id: orderId,
-                    notes: "Payment via STK Push"
-                },
-
-                _links: {
-                    callback_url: callbackUrl
-                }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json'
-                }
+        // 3. Initiate STK Push using SDK
+        const stkResponse = await StkService.initiateIncomingPayment({
+            tillNumber: process.env.KOPOKOPO_TILL_NUMBER || "K000000",
+            firstName: firstName || "Customer",
+            lastName: lastName || "User",
+            phoneNumber: phone,
+            amount: amount,
+            currency: "KES",
+            email: email || "customer@example.com",
+            callbackUrl: `${process.env.CALLBACK_URL || 'https://kopokopo-backend.onrender.com/api/callback'}?orderId=${orderId}`,
+            paymentChannel: "M-PESA STK Push",
+            accessToken: accessToken,
+            metadata: {
+                orderId: orderId,
+                notes: "Payment for Order " + orderId
             }
-        );
+        });
 
-        // ================= SUCCESS =================
+        console.log("✅ K2 SDK Response:", stkResponse);
+
         res.json({
             success: true,
-            ResponseCode: "0", // Compatible with index.html
+            ResponseCode: "0", // Keeping compatibility with frontend
             message: "STK push sent successfully",
-            CheckoutRequestID: response.headers.location || orderId,
-            data: response.data
+            location: stkResponse,
+            CheckoutRequestID: orderId // Using OrderId as fallback reference
         });
 
     } catch (err) {
-        console.error("❌ STK PUSH ERROR:", err.response?.data || err.message);
-
+        console.error("❌ K2 SDK ERROR:", err.message);
         res.status(500).json({
             success: false,
             error: "Payment failed",
-            details: err.response?.data || err.message
+            details: err.message
         });
     }
 };
@@ -132,22 +69,21 @@ exports.stkPush = async (req, res) => {
 exports.handleCallback = async (req, res) => {
     const { orderId } = req.query;
     const payload = req.body;
-    const targetOrderId = orderId || payload.data?.attributes?.metadata?.order_id;
 
-    console.log(`\n🔔 Payment Callback Received: Order ${targetOrderId}`);
+    // SDK Webhook/Callback payload structure
+    const attributes = payload.data?.attributes;
+    const targetOrderId = orderId || attributes?.metadata?.order_id;
+
+    console.log(`\n🔔 K2 Callback: Order ${targetOrderId} | Status: ${attributes?.status}`);
 
     try {
         if (!targetOrderId) throw new Error("Missing Order Reference");
 
         const orderUpdateUrl = `${DB_URL}/orders/${targetOrderId}.json`;
-        const attributes = payload.data?.attributes;
-        const status = attributes?.status;
 
-        if (status === 'Success') {
+        if (attributes?.status === 'Success') {
             const resource = attributes.event?.resource;
             const receipt = resource?.reference || resource?.system_generate_number;
-
-            console.log(`✅ PAID: Order ${targetOrderId} | Receipt: ${receipt}`);
 
             await axios.patch(orderUpdateUrl, {
                 status: 'Preparing Your Order',
@@ -155,73 +91,35 @@ exports.handleCallback = async (req, res) => {
                 paidAt: new Date().toISOString()
             });
         } else {
-            const errors = attributes?.event?.errors;
-            const failureReason = (errors && Array.isArray(errors) && errors.length > 0)
-                ? errors.join(', ')
-                : (attributes?.result_description || 'Transaction unsuccessful');
-
-            console.log(`❌ FAILED: Order ${targetOrderId} | Reason: ${failureReason}`);
-
             await axios.patch(orderUpdateUrl, {
                 status: 'Failed',
-                failureReason: failureReason
+                failureReason: attributes?.result_description || 'Transaction unsuccessful'
             });
         }
     } catch (error) {
         console.error('❌ Callback Processing Error:', error.message);
     }
 
-    res.sendStatus(200);
+    res.status(200).send("OK");
 };
 
-// ================= WEBHOOK HANDLER =================
+// ================= WEBHOOKS =================
 exports.webhook = async (req, res) => {
     console.log("🔔 Webhook Received:", JSON.stringify(req.body, null, 2));
-
-    try {
-        const attributes = req.body.data?.attributes;
-        const orderId = attributes?.metadata?.order_id;
-
-        if (attributes?.status === 'Success' && orderId) {
-            console.log(`✅ Webhook: Order ${orderId} verified as PAID`);
-            await axios.patch(`${DB_URL}/orders/${orderId}.json`, {
-                status: 'Preparing Your Order',
-                paidVia: 'Webhook Notification',
-                paidAt: new Date().toISOString()
-            });
-        }
-    } catch (error) {
-        console.error('❌ Webhook Error:', error.message);
-    }
-    res.sendStatus(200);
+    res.status(200).send("OK");
 };
 
-// ================= WEBHOOK SUBSCRIPTION =================
 exports.subscribeWebhooks = async (req, res) => {
     try {
-        const token = await getToken();
-
-        const request_body = {
-            event_type: req.body.event_type || "buygoods_transaction_received",
-            url: req.body.url || 'https://kopokopo-backend.onrender.com/api/webhook',
-            scope: req.body.scope || "till",
-            scope_reference: req.body.scope_reference || TILL_NUMBER,
-            enable_daraja_payload: req.body.enable_daraja_payload || false
-        };
-
-        const response = await axios.post(
-            `${BASE_URL}/api/v2/webhook_subscriptions`,
-            request_body,
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        res.json({ success: true, data: response.data });
+        const tokenResponse = await TokenService.getToken();
+        const response = await K2.Webhooks.subscribe({
+            eventType: 'buygoods_transaction_received',
+            url: 'https://kopokopo-backend.onrender.com/api/webhook',
+            scope: 'till',
+            scopeReference: process.env.KOPOKOPO_TILL_NUMBER || "K000000",
+            accessToken: tokenResponse.access_token
+        });
+        res.json({ success: true, data: response });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
