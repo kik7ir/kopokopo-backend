@@ -10,16 +10,17 @@ const K2 = require('k2-connect-node')({
 
 const StkService = K2.StkService;
 const TokenService = K2.TokenService;
+const Webhooks = K2.Webhooks;
 
 // Route to initiate STK Push
 router.post('/stk/push', async (req, res) => {
-    const { phoneNumber, amount, orderId, firstName, lastName } = req.body;
+    const { phoneNumber, amount, orderId, firstName, lastName, email } = req.body;
 
     if (!phoneNumber || !amount || !orderId) {
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Format phone number to E.164 (Kopo Kopo SDK usually expects +254...)
+    // Format phone number to E.164 (SDK 2.0.0 expects +254...)
     let formattedPhone = phoneNumber.replace(/\s+/g, '');
     if (formattedPhone.startsWith('0')) {
         formattedPhone = '+254' + formattedPhone.substring(1);
@@ -44,12 +45,14 @@ router.post('/stk/push', async (req, res) => {
         }
 
         const stkOptions = {
+            paymentChannel: 'M-PESA STK Push', // MANDATORY for SDK 2.0.0
             tillNumber: process.env.KOPOKOPO_TILL_NUMBER.trim(),
             firstName: firstName || 'Customer',
             lastName: lastName || 'User',
             phoneNumber: formattedPhone,
-            amount: amount.toString(), // Ensure amount is a string
+            amount: amount.toString(),
             currency: 'KES',
+            email: email || 'customer@example.com', // Expected by SDK subscriber mapping
             callbackUrl: process.env.CALLBACK_URL.trim(),
             accessToken: accessToken,
             metadata: {
@@ -65,12 +68,11 @@ router.post('/stk/push', async (req, res) => {
 
         let errorMessage = 'Failed to initiate STK push';
 
-        // Check for K2 SDK specific error responses
-        if (error.response && error.response.data) {
-            console.error('K2 Error Data:', JSON.stringify(error.response.data));
-            errorMessage = error.response.data.error_description ||
-                           error.response.data.error ||
-                           JSON.stringify(error.response.data);
+        // The SDK returns validation errors as objects/strings
+        if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error.response && error.response.data) {
+            errorMessage = error.response.data.error_description || error.response.data.error || JSON.stringify(error.response.data);
         } else if (error.message) {
             errorMessage = error.message;
         }
@@ -79,21 +81,20 @@ router.post('/stk/push', async (req, res) => {
     }
 });
 
-// Callback route for Kopo Kopo webhooks
+// Secure Callback route using SDK Signature Verification
 router.post('/callback', async (req, res) => {
     try {
-        const payload = req.body;
-        console.log('Kopo Kopo Callback Received:', JSON.stringify(payload));
+        // Webhooks.webhookHandler verifies the X-Kopokopo-Signature using your API_KEY
+        const payload = await Webhooks.webhookHandler(req, res);
+        console.log('Verified Kopo Kopo Callback:', JSON.stringify(payload));
 
-        const eventType = payload.event && payload.event.type;
-        const resource = payload.event && payload.event.resource;
+        // SDK 2.0.0 payload structure: payload.data.attributes.event.resource
+        const resource = payload.data && payload.data.attributes && payload.data.attributes.event && payload.data.attributes.event.resource;
         const metadata = (resource && resource.metadata) || {};
         const orderId = metadata.orderId;
         const status = resource && resource.status;
 
         if (orderId) {
-            console.log(`Processing payment for Order: ${orderId}, Status: ${status}`);
-
             const db = admin.database();
             const orderRef = db.ref(`orders/${orderId}`);
 
@@ -104,18 +105,7 @@ router.post('/callback', async (req, res) => {
                     kopoKopoId: resource.id,
                     updatedAt: Date.now()
                 });
-
-                // Also record in payments node
-                await db.ref(`payments/${orderId}`).set({
-                    orderId,
-                    amount: resource.amount,
-                    phoneNumber: resource.sender_phone_number,
-                    status: 'Success',
-                    timestamp: Date.now(),
-                    kopoKopoId: resource.id
-                });
-
-                console.log(`✅ Order ${orderId} marked as Processing`);
+                console.log(`✅ Order ${orderId} marked as Paid`);
             } else if (status === 'Failed') {
                 await orderRef.update({
                     status: 'Failed',
@@ -125,11 +115,9 @@ router.post('/callback', async (req, res) => {
                 console.log(`❌ Order ${orderId} marked as Failed`);
             }
         }
-
-        res.status(200).send('OK');
     } catch (error) {
-        console.error('Callback Error:', error);
-        res.status(500).send('Internal Server Error');
+        console.error('Webhook Verification Failed:', error);
+        // The SDK's webhookHandler already sends the appropriate error status to Kopo Kopo
     }
 });
 
