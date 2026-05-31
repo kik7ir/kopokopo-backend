@@ -7,3 +7,4 @@ server.err
 functions/node_modules/
 kopokopo-backend/node_modules/
 *.lnk
+*.log
