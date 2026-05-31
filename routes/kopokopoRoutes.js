@@ -31,13 +31,15 @@ router.post('/stk/push', async (req, res) => {
     }
 
     try {
+        console.log(`Initiating STK Push for ${formattedPhone}, Amount: ${amount}, Order: ${orderId}`);
+
         const tokenResponse = await TokenService.getToken();
         const accessToken = tokenResponse.access_token;
 
         const stkOptions = {
             tillNumber: process.env.KOPOKOPO_TILL_NUMBER,
             firstName: firstName || 'Customer',
-            lastName: lastName || '',
+            lastName: lastName || 'User',
             phoneNumber: formattedPhone,
             amount: amount,
             currency: 'KES',
@@ -49,10 +51,21 @@ router.post('/stk/push', async (req, res) => {
         };
 
         const response = await StkService.initiateIncomingPayment(stkOptions);
+        console.log('Kopo Kopo STK Success:', response);
         res.status(200).json({ success: true, location: response });
     } catch (error) {
-        console.error('STK Error:', error);
-        res.status(500).json({ error: error.message || 'Failed to initiate STK push' });
+        console.error('STK Error Detailed:', error);
+
+        // Extract more detailed error message if available from K2 SDK
+        let errorMessage = 'Failed to initiate STK push';
+        if (error.response && error.response.data) {
+            console.error('K2 Error Data:', error.response.data);
+            errorMessage = error.response.data.error || error.response.data.message || errorMessage;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+
+        res.status(500).json({ error: errorMessage });
     }
 });
 
