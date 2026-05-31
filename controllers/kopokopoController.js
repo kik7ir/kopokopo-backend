@@ -10,14 +10,12 @@ const axios = require('axios');
  */
 
 // ================= CONFIG =================
-const BASE_URL = process.env.KOPOKOPO_BASE_URL || 'https://api.kopokopo.com';
-
+// Hardcoding Sandbox values for testing to ensure they work on Render
+const BASE_URL = 'https://sandbox.kopokopo.com';
+const TILL_NUMBER = 'K000000'; // Sandbox Till
 const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID;
 const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET;
-
-// 🚨 IMPORTANT: NO fallback value (this caused your bug)
-const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER;
-const DB_URL = process.env.FIREBASE_DB_URL || "https://school-system-a97a4-default-rtdb.firebaseio.com";
+const DB_URL = "https://school-system-a97a4-default-rtdb.firebaseio.com";
 
 // ================= SAFETY CHECK =================
 if (!TILL_NUMBER) {
@@ -75,7 +73,7 @@ exports.stkPush = async (req, res) => {
         const response = await axios.post(
             `${BASE_URL}/api/v2/incoming_payments`,
             {
-                payment_channel: "M-PESA STK Push", // ✅ FIXED (VERY IMPORTANT)
+                payment_channel: "m-pesa", // ✅ Matches V2 API and Firebase function
                 till_number: TILL_NUMBER,
 
                 subscriber: {
