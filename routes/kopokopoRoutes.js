@@ -19,12 +19,15 @@ router.post('/stk/push', async (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Format phone number to E.164 if needed (assuming Kenya +254)
-    let formattedPhone = phoneNumber.replace(/\s+/g, '');
+    // Format phone number to E.164 (Kopo Kopo often prefers 254... without the +)
+    let formattedPhone = phoneNumber.replace(/\s+/g, '').replace(/\+/g, '');
     if (formattedPhone.startsWith('0')) {
-        formattedPhone = '+254' + formattedPhone.substring(1);
-    } else if (!formattedPhone.startsWith('+')) {
-        formattedPhone = '+' + formattedPhone;
+        formattedPhone = '254' + formattedPhone.substring(1);
+    } else if (formattedPhone.startsWith('254')) {
+        // Already in correct format
+    } else {
+        // Fallback for other formats
+        formattedPhone = '254' + formattedPhone;
     }
 
     try {
