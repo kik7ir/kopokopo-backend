@@ -26,13 +26,12 @@ function TokenService(options) {
 	 * @returns {Promise} Promise object having the token_type, access_token and expires_in
 	*/
 	this.getToken = function () {
-		var requestBody = {
-			client_id: clientId,
-			client_secret: clientSecret,
-			grant_type: 'client_credentials'
-		}
+		const params = new URLSearchParams();
+		params.append('client_id', clientId);
+		params.append('client_secret', clientSecret);
+		params.append('grant_type', 'client_credentials');
 
-		return axios.post(`${baseUrl}/oauth/token`, requestBody, {
+		return axios.post(`${baseUrl}/oauth/token`, params.toString(), {
 			headers: {
 				'Accept': 'application/json',
 				'Content-Type': 'application/x-www-form-urlencoded',
