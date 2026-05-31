@@ -11,20 +11,21 @@ const axios = require('axios');
 
 // ================= CONFIG =================
 // Hardcoding Sandbox values for testing to ensure they work on Render
-const BASE_URL = 'https://sandbox.kopokopo.com';
-const TILL_NUMBER = 'K000000'; // Sandbox Till
+const BASE_URL = process.env.KOPOKOPO_BASE_URL || 'https://sandbox.kopokopo.com';
+const TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || 'K000000'; // Fallback to Sandbox Till
 const CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID;
 const CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET;
 const DB_URL = "https://school-system-a97a4-default-rtdb.firebaseio.com";
 
 // ================= SAFETY CHECK =================
-if (!TILL_NUMBER) {
-    console.error("❌ KOPOKOPO_TILL_NUMBER is missing in environment variables");
+if (!CLIENT_ID || !CLIENT_SECRET) {
+    console.error("❌ CRITICAL: KOPOKOPO_CLIENT_ID or CLIENT_SECRET is missing in environment variables!");
 }
 
 // ================= GET TOKEN =================
 async function getToken() {
     try {
+        console.log(`🔑 Requesting token from: ${BASE_URL}/oauth/token`);
         const res = await axios.post(`${BASE_URL}/oauth/token`, {
             grant_type: "client_credentials",
             client_id: CLIENT_ID,
@@ -33,8 +34,9 @@ async function getToken() {
 
         return res.data.access_token;
     } catch (err) {
-        console.error("❌ Auth Failed:", err.response?.data || err.message);
-        throw new Error("KopoKopo authentication failed");
+        const errDetail = err.response?.data || err.message;
+        console.error("❌ Auth Failed:", errDetail);
+        throw new Error(`KopoKopo authentication failed: ${JSON.stringify(errDetail)}`);
     }
 }
 
