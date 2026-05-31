@@ -978,24 +978,16 @@ img{
         const cacheData = (key, data) => {
             const cacheKey = `mms_cache_${key}`;
             try {
-                let dataToCache = data;
-                // Limit products cache to 15 items to save space
-                if (key === 'products' && Array.isArray(data)) dataToCache = data.slice(0, 15);
+                // If it's the product list, only cache a small portion to avoid Quota errors
+                // Full data is always loaded from Firebase regardless
+                let dataToCache = (key === 'products' && Array.isArray(data)) ? data.slice(0, 10) : data;
 
-                localStorage.setItem(cacheKey, JSON.stringify({ data: dataToCache, timestamp: Date.now() }));
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    data: dataToCache,
+                    timestamp: Date.now()
+                }));
             } catch (e) {
-                console.warn("⚡ Cache Quota Exceeded. Purging and retrying...", key);
-                // Purge ALL mms_cache_ items to clear space
-                Object.keys(localStorage).forEach(k => {
-                    if (k.startsWith('mms_cache_')) localStorage.removeItem(k);
-                });
-
-                // Retry once after purging
-                try {
-                    localStorage.setItem(cacheKey, JSON.stringify({ data: data, timestamp: Date.now() }));
-                } catch (retryError) {
-                    console.error("❌ Critical Cache Failure:", key);
-                }
+                console.warn("⚡ Cache Storage Full. Skipping local cache for:", key);
             }
         };
         const getCache = (key) => {
@@ -2229,7 +2221,7 @@ img{
                 }
 
                 div.innerHTML = `
-                    <img loading="lazy" decoding="async" src="${p.imageUrl || 'logo.jpg'}" alt="${p.title}">
+                    <img loading="lazy" decoding="async" src="${p.imageUrl || '69557b3c-c62a-448b-8e6e-7c8aba032438.jpg'}" alt="${p.title}" onerror="this.src='69557b3c-c62a-448b-8e6e-7c8aba032438.jpg'">
                     <div class="item-text">${priceHtml}</div>
                 `;
                 slider.appendChild(div);
@@ -3114,10 +3106,11 @@ It's currently out of stock. Please notify me once you restock this item! 😊`;
                 }
 
                 try {
-                    // Update this URL after deploying your backend to Render
-                    const backendUrl = 'https://kopokopo-backend.onrender.com/api/stkpush';
+                    // STRICT: Using Render Backend for all Sandbox/Production payments
+                    const RENDER_BACKEND_URL = 'https://kopokopo-backend.onrender.com';
+                    const backendUrl = `${RENDER_BACKEND_URL}/api/stkpush`;
 
-                    console.log(`🚀 Sending STK Push request to: ${backendUrl} for ${cleanPhone}`);
+                    console.log(`🚀 Sending STK Push request to Render: ${backendUrl} for ${cleanPhone}`);
 
                     const response = await fetch(backendUrl, {
                         method: 'POST',

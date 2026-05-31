@@ -563,7 +563,7 @@
 
 <div class="admin-container">
     <div class="admin-header">
-        <img src="logo.jpg" alt="Logo" style="width: 70px; height: 70px; border-radius: 50%; border: 2px solid var(--gold); background: #fff; padding: 3px;">
+        <img src="69557b3c-c62a-448b-8e6e-7c8aba032438.jpg" alt="Logo" onerror="this.style.display='none'" style="width: 70px; height: 70px; border-radius: 50%; border: 2px solid var(--gold); background: #fff; padding: 3px; object-fit: cover;">
         <h1>Modish Mix <span>Control Center</span></h1>
     </div>
 
@@ -837,6 +837,32 @@
             <h3 style="margin: 30px 0 10px; color: #3498db; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Database Maintenance</h3>
             <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">Optimize all existing product images to WebP format (800x800) to save storage space and improve loading speed.</p>
             <button onclick="optimizeAllImages()" id="optimizeBtn" style="background: #3498db; color: white;">Optimize Existing Images</button>
+
+            <h3 style="margin: 30px 0 10px; color: #2ecc71; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Backup & Recovery</h3>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">Download a complete copy of your store data locally or restore it if data is accidentally deleted.</p>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="downloadFullBackup(this)" style="background: #2ecc71; color: white; flex: 1;">
+                    <i class="fa-solid fa-download"></i> Full Backup (Data + Images)
+                </button>
+                <button onclick="downloadProductsBackup(this)" style="background: #3498db; color: white; flex: 1;">
+                    <i class="fa-solid fa-box-archive"></i> Products Only
+                </button>
+                <button onclick="document.getElementById('restoreInput').click()" style="background: #e67e22; color: white; flex: 1;">
+                    <i class="fa-solid fa-upload"></i> Restore from File
+                </button>
+                <input type="file" id="restoreInput" style="display: none;" accept=".json" onchange="restoreFromBackup(this)">
+            </div>
+
+            <!-- Export Progress Bar -->
+            <div id="exportProgressContainer" style="display: none; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span id="exportStatus" style="font-size: 0.9rem; color: #fff;">Preparing Export...</span>
+                    <span id="exportPercent" style="font-size: 0.9rem; font-weight: bold; color: var(--gold);">0%</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
+                    <div id="exportBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #2ecc71, #27ae60); transition: width 0.3s ease;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2256,6 +2282,172 @@
             btn.disabled = false;
             btn.innerText = originalText;
         }
+    };
+
+    // --- BACKUP & RECOVERY WITH PROGRESS BAR ---
+    window.updateExportProgress = (percent, status) => {
+        const container = document.getElementById('exportProgressContainer');
+        const bar = document.getElementById('exportBar');
+        const percentText = document.getElementById('exportPercent');
+        const statusText = document.getElementById('exportStatus');
+
+        container.style.display = 'block';
+        bar.style.width = percent + '%';
+        percentText.innerText = percent + '%';
+        if (status) statusText.innerText = status;
+
+        if (percent >= 100) {
+            setTimeout(() => {
+                container.style.display = 'none';
+                bar.style.width = '0%';
+            }, 3000);
+        }
+    };
+
+    window.downloadFullBackup = async (btn) => {
+        const originalText = btn ? btn.innerHTML : 'Backup';
+        try {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing...';
+            }
+            updateExportProgress(5, "Connecting to Database...");
+
+            // Get a reference to the whole database with a timeout
+            const dbRef = ref(db);
+
+            // Timeout logic: if it takes more than 45 seconds, fail gracefully
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Connection timed out. Your database might be very large or your internet is slow.")), 45000)
+            );
+
+            const snapshot = await Promise.race([get(dbRef), timeoutPromise]);
+
+            updateExportProgress(40, "Data Received. Analyzing Media...");
+
+            const data = snapshot.val();
+            if (!data) {
+                updateExportProgress(0, "Error: No Data");
+                return alert("No data found in database!");
+            }
+
+            // Media Integrity Check
+            let imgCount = 0;
+            if (data.products) {
+                Object.values(data.products).forEach(p => {
+                    if (p.imageUrl) imgCount++;
+                    if (p.images && Array.isArray(p.images)) imgCount += (p.images.length - 1);
+                });
+            }
+
+            updateExportProgress(60, `Packaging ${imgCount} Images & Products...`);
+            // Full Recovery Payload including Base64 Images
+            const backupData = {
+                products: data.products || {},
+                categories: data.categories || {},
+                subcategories: data.subcategories || {},
+                settings: data.settings || {},
+                orders: data.orders || {},
+                timestamp: new Date().toISOString(),
+                version: "RECOVERY_V2_MEDIA",
+                media_count: imgCount
+            };
+
+            updateExportProgress(85, "Generating Secure JSON File...");
+            const blob = new Blob([JSON.stringify(backupData)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+
+            updateExportProgress(100, "Export Complete!");
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `MMS_COMPLETE_STORE_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            alert("SUCCESS: Full backup created! \n\nThis file contains ALL product images (Base64), categories, and store details.");
+        } catch (e) {
+            alert("Backup failed: " + e.message);
+            updateExportProgress(0, "Export Failed");
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    };
+
+    window.downloadProductsBackup = async (btn) => {
+        const originalText = btn ? btn.innerHTML : 'Export';
+        try {
+            if (btn) btn.disabled = true;
+            updateExportProgress(10, "Fetching Products...");
+
+            const snapshot = await get(ref(db, 'products'));
+            updateExportProgress(50, "Processing Inventory...");
+
+            const data = snapshot.val();
+            if (!data) {
+                updateExportProgress(0, "Error: No Products");
+                return alert("No products found to backup!");
+            }
+
+            // Wrap in a format that the restorer can recognize
+            const backupPayload = { products: data };
+
+            updateExportProgress(80, "Creating Product Archive...");
+            const blob = new Blob([JSON.stringify(backupPayload)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+
+            updateExportProgress(100, "Export Complete!");
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `MMS_PRODUCTS_ONLY_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            alert("Product backup failed: " + e.message);
+            updateExportProgress(0, "Export Failed");
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    };
+
+    window.restoreFromBackup = async (input) => {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+
+                let confirmMsg = "WARNING: This will overwrite current data. Proceed?";
+                if (data.products && !data.orders && !data.settings) {
+                    confirmMsg = "This file contains ONLY products. It will overwrite your current product list but keep orders/settings. Proceed?";
+                }
+
+                if (!confirm(confirmMsg)) {
+                    input.value = "";
+                    return;
+                }
+
+                if (data.products && Object.keys(data).length === 1) {
+                    // It's a products-only backup
+                    await set(ref(db, 'products'), data.products);
+                } else {
+                    // It's a full backup
+                    await set(ref(db), data);
+                }
+
+                alert("Data restored successfully! The page will now reload.");
+                window.location.reload();
+            } catch (error) {
+                alert("Restore failed: Invalid backup file or database error.");
+                console.error(error);
+            }
+        };
+        reader.readAsText(file);
     };
 
     onValue(ref(db, ".info/connected"), (snap) => {
